@@ -6,6 +6,7 @@
     <Project Path="src/OsuRotate.Web/OsuRotate.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/OsuRotate.Application.Tests/OsuRotate.Application.Tests.csproj" />
     <Project Path="tests/OsuRotate.Architecture.Tests/OsuRotate.Architecture.Tests.csproj" />
     <Project Path="tests/OsuRotate.Bancho.Tests/OsuRotate.Bancho.Tests.csproj" />
     <Project Path="tests/OsuRotate.Domain.Tests/OsuRotate.Domain.Tests.csproj" />
