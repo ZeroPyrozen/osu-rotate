@@ -122,6 +122,25 @@ public sealed partial class LobbyEngine
             case RoomCreated or RoomJoined:
                 KeeperOnRoomEntered();
                 StartInfoAnnouncement();
+                if (lobbyEvent is RoomJoined)
+                {
+                    // A room joined after a restart may have referees the bot has not seen added.
+                    _output.Add(new RequestReferees());
+                }
+
+                break;
+
+            // The list that follows is complete, so it replaces what was known.
+            case RefereeListStarted:
+                Room.ClearReferees();
+                break;
+
+            case RefereeAdded e:
+                Room.AddReferee(e.Username);
+                break;
+
+            case RefereeRemoved e:
+                Room.RemoveReferee(e.Username);
                 break;
 
             case PlayerJoined e:
@@ -372,8 +391,8 @@ public sealed partial class LobbyEngine
             AfkOnChat(speaker);
         }
 
-        // The owner is a referee, so Bancho runs their !mp commands itself.
-        if (isOwner && text.StartsWith("!mp", StringComparison.OrdinalIgnoreCase))
+        // Bancho runs a referee's !mp commands itself, so they are not read as player commands.
+        if ((isOwner || Room.IsReferee(username)) && text.StartsWith("!mp", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }

@@ -86,6 +86,20 @@ public class BanchoCommandFormatterTests
         Assert.Equal("PRIVMSG BanchoBot :!mp make room" + new string('x', 46), message.Line);
     }
 
+    // osu-ahr's LobbyTest "remove invalid chars from lobby title" cases. This also trims the ends.
+    [Theory]
+    [InlineData("a", "a")]
+    [InlineData("asdflkj", "asdflkj")]
+    [InlineData(" $% BN |~=", "$% BN |~=")]
+    [InlineData("4-5 | alt | test @join", "4-5 | alt | test @join")]
+    [InlineData("あいうおaaa", "aaa")]
+    [InlineData("aa\n\raa", "aaaa")]
+    public void Room_names_keep_only_printable_ascii(string name, string expected)
+    {
+        var message = Assert.Single(BanchoCommandFormatter.Format(new SetRoomName(name), Channel));
+        Assert.Equal($"PRIVMSG {Channel} :!mp name {expected}", message.Line);
+    }
+
     [Fact]
     public void Line_breaks_in_arguments_cannot_inject_commands()
     {

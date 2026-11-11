@@ -450,18 +450,18 @@ public class LobbyKeeperTests
         public void Entering_the_room_sets_everything_kept()
         {
             var lobby = Create(Everything);
-            lobby.Feed(new RoomJoined(1));
+            lobby.Feed(new RoomCreated(1, "room"));
             Assert.Equal(
                 [new SetRoomName("auto host rotation"), new SetTeamAndScoreMode(2, 3, 8), new SetMods("Freemod dt"), new SetPassword("secret")],
                 lobby.Sent);
         }
 
         [Fact]
-        public void Creating_the_room_does_the_same()
+        public void Joining_the_room_does_the_same()
         {
             var lobby = Create(Everything);
-            lobby.Feed(new RoomCreated(1, "x"));
-            Assert.Equal(4, lobby.Sent.Count);
+            lobby.Feed(new RoomJoined(1));
+            Assert.Equal(4, lobby.Sent.Count(c => c is not RequestReferees));
         }
 
         [Fact]
@@ -477,7 +477,7 @@ public class LobbyKeeperTests
         public void Size_alone_uses_mp_size_and_an_empty_password_opens_the_room()
         {
             var lobby = Create(new RoomKeeping { Size = 4, Password = string.Empty });
-            lobby.Feed(new RoomJoined(1));
+            lobby.Feed(new RoomCreated(1, "room"));
             Assert.Equal([new SetSize(4), new SetPassword(null)], lobby.Sent);
         }
 
@@ -485,7 +485,7 @@ public class LobbyKeeperTests
         public void Mode_without_size_leaves_the_size_alone()
         {
             var lobby = Create(new RoomKeeping { Mode = new KeptMode(TeamMode.TagCoop, ScoreMode.Combo) });
-            lobby.Feed(new RoomJoined(1));
+            lobby.Feed(new RoomCreated(1, "room"));
             Assert.Equal([new SetTeamAndScoreMode(1, 2)], lobby.Sent);
         }
 

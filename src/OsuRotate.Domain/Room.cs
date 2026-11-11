@@ -113,6 +113,19 @@ public sealed class Room
         return finished;
     }
 
+    // Referees as !mp listrefs and !mp addref report them. They need not be in the room.
+    private readonly HashSet<string> _referees = [];
+
+    public IReadOnlyCollection<string> Referees => _referees;
+
+    public bool IsReferee(string name) => _referees.Contains(Player.KeyOf(name));
+
+    public void AddReferee(string name) => _referees.Add(Player.KeyOf(name));
+
+    public void RemoveReferee(string name) => _referees.Remove(Player.KeyOf(name));
+
+    public void ClearReferees() => _referees.Clear();
+
     public RoomChanges Merge(RoomState state)
     {
         BeatmapId = state.BeatmapId;
