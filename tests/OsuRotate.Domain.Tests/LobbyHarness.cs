@@ -23,9 +23,10 @@ internal sealed class LobbyHarness
     private bool _matching;
     private int _nextBeatmap = 100;
 
-    public LobbyHarness()
+    public LobbyHarness(Func<LobbySettings, LobbySettings>? configure = null)
     {
-        Engine = new LobbyEngine(new LobbySettings { OwnerName = Owner }, Time);
+        var settings = new LobbySettings { OwnerName = Owner };
+        Engine = new LobbyEngine(configure?.Invoke(settings) ?? settings, Time);
     }
 
     public ManualTime Time { get; } = new();
@@ -67,6 +68,20 @@ internal sealed class LobbyHarness
         {
             Feed(reply);
         }
+    }
+
+    // Bancho never answers what it was holding back.
+    public void Drop()
+    {
+        Holding = false;
+        _held.Clear();
+    }
+
+    // Moves the clock on and fires whatever timers fall due, the way the phase 4 runner will.
+    public void Wait(TimeSpan by)
+    {
+        Time.Advance(by);
+        Run(Engine.Tick);
     }
 
     public string[] AddPlayers(params string[] names)
@@ -155,6 +170,10 @@ internal sealed class LobbyHarness
         Feed(new RoomStateReceived(state));
     }
 
+    public bool IsMatching => _matching;
+
+    public int SentCount<T>() where T : LobbyCommand => Sent.OfType<T>().Count();
+
     public void Chat(string name, string text) => Feed(new ChatReceived(name, text, false));
 
     public void AssertHost(string name)
@@ -224,6 +243,9 @@ internal sealed class LobbyHarness
             case Domain.AbortMatch:
                 yield return _matching ? new MatchAborted() : new MatchNotInProgress();
                 _matching = false;
+                break;
+            case AbortCountdown:
+                yield return new CountdownAborted();
                 break;
             case Domain.StartMatch:
                 _matching = true;

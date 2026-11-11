@@ -10,6 +10,17 @@ public sealed record LobbySettings
     public int QueueMessageMaxLength { get; init; } = 90;
     public TimeSpan QueueMessageCooldown { get; init; } = TimeSpan.FromSeconds(15);
     public TimeSpan RoomStateRequestCooldown { get; init; } = TimeSpan.FromSeconds(15);
+
+    // How long Bancho may take to confirm a host transfer before the bot asks for !mp settings.
+    public TimeSpan HostTransferTimeout { get; init; } = TimeSpan.FromSeconds(5);
+
+    public VoteRule SkipVote { get; init; } = new(0.5, 2);
+    // Skip votes are ignored this long after the host changes.
+    public TimeSpan SkipVoteCooldown { get; init; } = TimeSpan.FromSeconds(5);
+    public VoteRule StartVote { get; init; } = new(0.45, 2);
+    public bool StartWhenAllReady { get; init; } = true;
+    public VoteRule AbortVote { get; init; } = new(0.3, 2);
+    public TimeSpan VoteMessageDelay { get; init; } = TimeSpan.FromSeconds(5);
 }
 
 // The lobby's rules. Takes one input at a time and returns the commands for Bancho. It does no I/O
@@ -17,22 +28,39 @@ public sealed record LobbySettings
 public sealed partial class LobbyEngine
 {
     private const string QueueMessageKey = "host-queue";
+    private const string RoomStateKey = "room-state";
+    private const string HostTransferTimer = "host-transfer";
 
     private readonly LobbySettings _settings;
     private readonly TimeProvider _time;
     private readonly List<LobbyCommand> _output = [];
     private readonly Dictionary<string, DateTimeOffset> _lastSent = [];
+    private readonly Dictionary<string, string> _deferred = [];
 
     public LobbyEngine(LobbySettings settings, TimeProvider time)
     {
         _settings = settings;
         _time = time;
+        Timers = new Timers(time);
+        SkipVotes = new VoteCounter(settings.SkipVote);
+        StartVotes = new VoteCounter(settings.StartVote);
+        AbortVotes = new VoteCounter(settings.AbortVote);
         Rotation = new HostRotation(Room, DenyList, _output.Add);
     }
 
     public Room Room { get; } = new();
     public DenyList DenyList { get; } = new();
     public HostRotation Rotation { get; }
+    public Timers Timers { get; }
+
+    // When the next timer is due. The runner sleeps until then, or until the next event, and calls Tick.
+    public DateTimeOffset? NextDue => Timers.NextDue;
+
+    public IReadOnlyList<LobbyCommand> Tick()
+    {
+        Timers.FireDue();
+        return Flush();
+    }
 
     public IReadOnlyList<LobbyCommand> Handle(LobbyEvent lobbyEvent)
     {
@@ -43,6 +71,7 @@ public sealed partial class LobbyEngine
                 if (Room.TryAdd(joined, e.Slot, e.Team))
                 {
                     Rotation.OnPlayerJoined(joined);
+                    VotesOnPlayerJoined(joined);
                 }
                 else
                 {
@@ -53,9 +82,11 @@ public sealed partial class LobbyEngine
 
             case PlayerLeft e:
                 var left = Room.GetOrAdd(e.Username);
+                var leftWasHost = left == Room.Host || left == Room.PendingHost;
                 if (Room.TryRemove(left))
                 {
                     Rotation.OnPlayerLeft(left, fromRoomState: false);
+                    VotesOnPlayerLeft(left, leftWasHost);
                 }
                 else
                 {
@@ -77,6 +108,7 @@ public sealed partial class LobbyEngine
                 if (Room.TrySetHost(host))
                 {
                     Rotation.OnHostChanged(host);
+                    VotesOnHostChanged();
                 }
                 else
                 {
@@ -104,6 +136,19 @@ public sealed partial class LobbyEngine
             case MatchStarted:
                 Room.StartMatch();
                 Rotation.OnMatchStarted();
+                VotesOnMatchStarted();
+                break;
+
+            case AllPlayersReady when _settings.StartWhenAllReady:
+                StartMatchNow();
+                break;
+
+            case CountdownStarted:
+                _countdownRunning = true;
+                break;
+
+            case CountdownFinished or CountdownAborted:
+                _countdownRunning = false;
                 break;
 
             case PlayerFinished e:
@@ -147,7 +192,7 @@ public sealed partial class LobbyEngine
 
     public IReadOnlyList<LobbyCommand> Skip()
     {
-        Rotation.Skip();
+        SkipHost();
         return Flush();
     }
 
@@ -200,6 +245,14 @@ public sealed partial class LobbyEngine
         foreach (var player in changes.Left)
         {
             Rotation.OnPlayerLeft(player, fromRoomState: true);
+            SkipVotes.RemoveVoter(player);
+            StartVotes.RemoveVoter(player);
+            AbortVotes.RemoveVoter(player);
+        }
+
+        foreach (var player in changes.Joined)
+        {
+            VotesOnPlayerJoined(player);
         }
 
         if (changes.Any)
@@ -218,15 +271,33 @@ public sealed partial class LobbyEngine
             return;
         }
 
-        if (ChatCommand.Parse(text) is not { } command || (!isOwner && Room.Find(username) is null))
+        // Only players in the room count, except the owner, who may be chatting from IRC.
+        var player = Room.Find(username) is { } found && Room.Contains(found) ? found : null;
+        if (ChatCommand.Parse(text) is not { } command || (!isOwner && player is null))
         {
             return;
         }
 
-        if (command.Name is "!q" or "!queue")
+        switch (command.Name)
         {
-            ShowQueue();
-            return;
+            case "!q" or "!queue":
+                ShowQueue();
+                return;
+            case "!skip":
+                OnSkipCommand(player, command.Argument);
+                return;
+            case "!start":
+                OnStartCommand(player, isOwner, command.Argument);
+                return;
+            case "!stop":
+                OnStopCommand(player, isOwner);
+                return;
+            case "!abort" when Room.IsMatching:
+                OnAbortVoteCommand(player);
+                return;
+            case "!abort":
+                OnStopCommand(player, isOwner);
+                return;
         }
 
         if (!isOwner)
@@ -236,11 +307,17 @@ public sealed partial class LobbyEngine
 
         switch (command.Name)
         {
+            case "*start" when !Room.IsMatching:
+                StartMatchNow();
+                break;
+            case "*abort" when Room.IsMatching:
+                AbortMatchNow();
+                break;
             case "*reorder" or "*order" when command.Argument.Length > 0:
                 Reorder(command.Argument);
                 break;
             case "*skip":
-                Rotation.Skip();
+                SkipHost();
                 break;
             case "*skipto" when command.Argument.Length > 0:
                 SkipTo(command.Argument);
@@ -280,9 +357,35 @@ public sealed partial class LobbyEngine
         _output.Add(new Say($"Host order: {names}", CommandPriority.Info, QueueMessageKey));
     }
 
+    private void Announce(string text) => _output.Add(new Say(text));
+
+    // Sends text after a delay under a key. A later message under the same key replaces the text and,
+    // unless restart is false, the delay too, so a burst of updates becomes one message.
+    private void Defer(string key, string text, TimeSpan delay, bool restart)
+    {
+        _deferred[key] = text;
+        var timer = $"say:{key}";
+        if (restart || !Timers.IsRunning(timer))
+        {
+            Timers.Start(timer, delay, () =>
+            {
+                if (_deferred.Remove(key, out var message))
+                {
+                    _output.Add(new Say(message, CommandPriority.Info, key));
+                }
+            });
+        }
+    }
+
+    private void CancelDeferred(string key)
+    {
+        Timers.Cancel($"say:{key}");
+        _deferred.Remove(key);
+    }
+
     private void RequestRoomState()
     {
-        if (CooledDown("room-state", _settings.RoomStateRequestCooldown))
+        if (CooledDown(RoomStateKey, _settings.RoomStateRequestCooldown))
         {
             _output.Add(new RequestRoomState());
         }
@@ -300,8 +403,32 @@ public sealed partial class LobbyEngine
         return true;
     }
 
+    // Bancho may never confirm a transfer, for example when a message was lost. Ask for the room state
+    // then, since the bot no longer knows who is host. A pending host who left is already cleared by
+    // Room.TryRemove, so the player is still in the room here.
+    private void OnHostTransferTimedOut()
+    {
+        if (Room.PendingHost is null)
+        {
+            return;
+        }
+
+        Room.PendingHost = null;
+        _lastSent[RoomStateKey] = _time.GetUtcNow();
+        _output.Add(new RequestRoomState());
+    }
+
     private List<LobbyCommand> Flush()
     {
+        if (_output.Any(c => c is TransferHost))
+        {
+            Timers.Start(HostTransferTimer, _settings.HostTransferTimeout, OnHostTransferTimedOut);
+        }
+        else if (Room.PendingHost is null)
+        {
+            Timers.Cancel(HostTransferTimer);
+        }
+
         var commands = _output.ToList();
         _output.Clear();
         return commands;
