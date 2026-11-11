@@ -46,6 +46,8 @@ public sealed record LobbySettings
     public bool AbortStuckMatch { get; init; } = true;
 
     public MapRegulation Regulation { get; init; } = new();
+
+    public RoomKeeping Keeping { get; init; } = new();
 }
 
 // The lobby's rules. Takes one input at a time and returns the commands for Bancho. It does no I/O
@@ -71,6 +73,7 @@ public sealed partial class LobbyEngine
         StartVotes = new VoteCounter(settings.StartVote);
         AbortVotes = new VoteCounter(settings.AbortVote);
         Rotation = new HostRotation(Room, DenyList, _output.Add);
+        _slotKeeper = new SlotKeeper(time.GetUtcNow()) { Size = settings.Keeping.Size };
     }
 
     public LobbySettings Settings => _settings;
@@ -82,6 +85,7 @@ public sealed partial class LobbyEngine
         SkipVotes.Rule = settings.SkipVote;
         StartVotes.Rule = settings.StartVote;
         AbortVotes.Rule = settings.AbortVote;
+        _slotKeeper.Size = settings.Keeping.Size;
     }
 
     public Room Room { get; } = new();
@@ -102,6 +106,10 @@ public sealed partial class LobbyEngine
     {
         switch (lobbyEvent)
         {
+            case RoomCreated or RoomJoined:
+                KeeperOnRoomEntered();
+                break;
+
             case PlayerJoined e:
                 var joined = Room.GetOrAdd(e.Username);
                 if (Room.TryAdd(joined, e.Slot, e.Team))
@@ -109,6 +117,7 @@ public sealed partial class LobbyEngine
                     Rotation.OnPlayerJoined(joined);
                     VotesOnPlayerJoined(joined);
                     AfkOnPlayerJoined(joined);
+                    KeeperOnPlayerJoined(e.Slot);
                 }
                 else
                 {
@@ -125,6 +134,7 @@ public sealed partial class LobbyEngine
                     Rotation.OnPlayerLeft(left, fromRoomState: false);
                     VotesOnPlayerLeft(left, leftWasHost);
                     AfkOnPlayerLeft(left);
+                    KeeperOnPlayerLeft(left.Slot);
                     CheckStuckMatch();
                 }
                 else
@@ -135,7 +145,10 @@ public sealed partial class LobbyEngine
                 break;
 
             case PlayerMoved e:
-                Room.GetOrAdd(e.Username).Slot = e.Slot;
+                var moved = Room.GetOrAdd(e.Username);
+                var from = moved.Slot;
+                moved.Slot = e.Slot;
+                KeeperOnPlayerMoved(from, e.Slot);
                 break;
 
             case PlayerTeamChanged e:
@@ -225,6 +238,7 @@ public sealed partial class LobbyEngine
                 StopStuckMatchCheck();
                 AfkOnMatchFinished();
                 Rotation.OnMatchFinished();
+                KeeperOnMatchFinished();
                 if (_settings.ShowQueueAfterMatch)
                 {
                     ShowQueue();
@@ -248,6 +262,7 @@ public sealed partial class LobbyEngine
 
             case RoomStateReceived e:
                 ApplyRoomState(e.State);
+                KeeperOnRoomState(e.State);
                 break;
 
             case ChatReceived e:
@@ -387,6 +402,10 @@ public sealed partial class LobbyEngine
                 break;
             case "*abort" when Room.IsMatching:
                 AbortMatchNow();
+                break;
+            case "*keep":
+            case "*no" when command.Argument.TrimStart().StartsWith("keep", StringComparison.Ordinal):
+                ChangeKeeping(command.Name, command.Argument);
                 break;
             case "*regulation" or "*no" or "*mapchecker_enable" or "*mapchecker_disable":
                 ChangeRegulation(command.Name, command.Argument);

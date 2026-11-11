@@ -188,6 +188,17 @@ internal sealed class LobbyHarness
 
     public bool IsMatching => _matching;
 
+    // The room settings the fake room reports in !mp settings, changed by the bot's !mp commands.
+    public string RoomName { get; set; } = "room";
+    public string TeamModeText { get; set; } = "HeadToHead";
+    public string WinCondition { get; set; } = "Score";
+    public string ActiveMods { get; set; } = "Freemod";
+    public int? Size { get; set; }
+    public string? Password { get; set; }
+
+    // Where each player sits when !mp settings is asked for. Players missing here sit in join order.
+    public Dictionary<string, int> Slots { get; } = [];
+
     // What BanchoBot answers to !stat. Players missing here get no answer.
     public Dictionary<string, PlayerActivity> Stats { get; } = [];
 
@@ -340,8 +351,25 @@ internal sealed class LobbyHarness
                 yield return new MatchStarted();
                 break;
             case RequestRoomState:
-                yield return new RoomStateReceived(new RoomState("room", 1, 100, "map", "HeadToHead", "Score", "Freemod",
-                    [.. _players.Select((name, i) => new RoomPlayer(i + 1, "Not Ready", i + 1, name, name == _host, Team.None, string.Empty))]));
+                yield return new RoomStateReceived(new RoomState(RoomName, 1, 100, "map", TeamModeText, WinCondition, ActiveMods,
+                    [.. _players.Select((name, i) => new RoomPlayer(Slots.GetValueOrDefault(name, i + 1), "Not Ready", i + 1, name, name == _host, Team.None, string.Empty))]));
+                break;
+            case SetTeamAndScoreMode c:
+                TeamModeText = ((TeamMode)c.TeamMode).ToString();
+                WinCondition = ((ScoreMode)c.ScoreMode).ToString();
+                Size = c.Size ?? Size;
+                break;
+            case SetSize c:
+                Size = c.Size;
+                break;
+            case SetMods c:
+                ActiveMods = RoomModes.ParseMods(c.Mods).ToNames();
+                break;
+            case SetRoomName c:
+                RoomName = c.Name;
+                break;
+            case SetPassword c:
+                Password = c.Password;
                 break;
         }
     }
