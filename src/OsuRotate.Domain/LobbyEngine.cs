@@ -48,6 +48,19 @@ public sealed record LobbySettings
     public MapRegulation Regulation { get; init; } = new();
 
     public RoomKeeping Keeping { get; init; } = new();
+
+    // Said for !info and !help. ${version} becomes BotVersion. Lines are split on \n.
+    public string InfoMessage { get; init; } =
+        "- osu-rotate ${version} -\n"
+        + "- The host rotation is managed with a queue. Players join the back of the queue when they enter the lobby and go back there once their map has been played.\n"
+        + "- Commands: !q (queue), !skip, !start, !abort, !r (regulation), !update, !mirror, !rank";
+    public TimeSpan InfoMessageCooldown { get; init; } = TimeSpan.FromSeconds(60);
+
+    // Says the info message this often. Only intervals over 3 minutes count; zero turns it off.
+    public TimeSpan InfoAnnouncementInterval { get; init; } = TimeSpan.Zero;
+
+    // The running build, filled in by the host.
+    public string BotVersion { get; init; } = "0.0.0";
 }
 
 // The lobby's rules. Takes one input at a time and returns the commands for Bancho. It does no I/O
@@ -108,6 +121,7 @@ public sealed partial class LobbyEngine
         {
             case RoomCreated or RoomJoined:
                 KeeperOnRoomEntered();
+                StartInfoAnnouncement();
                 break;
 
             case PlayerJoined e:
@@ -188,6 +202,7 @@ public sealed partial class LobbyEngine
 
             case BeatmapChanged e:
                 Room.BeatmapId = e.BeatmapId;
+                InfoOnBeatmapChanged(e);
                 _mapChangedSinceMatch = true;
                 StartHostAfkCheck(first: false);
                 MapsOnBeatmapChanged(e.BeatmapId, e.Title);
@@ -195,6 +210,7 @@ public sealed partial class LobbyEngine
                 break;
 
             case BeatmapLookedUp e:
+                InfoOnLookedUp(e.BeatmapId, e.Result);
                 MapsOnLookedUp(e.BeatmapId, e.Result);
                 break;
 
@@ -267,6 +283,10 @@ public sealed partial class LobbyEngine
 
             case ChatReceived e:
                 HandleChat(e.Username, e.Text);
+                break;
+
+            case PrivateMessageReceived e:
+                OnPrivateMessage(e.Username, e.Text);
                 break;
         }
 
@@ -372,6 +392,21 @@ public sealed partial class LobbyEngine
                 return;
             case "!r" or "!regulation":
                 ShowRegulation();
+                return;
+            case "!info" or "!help":
+                ShowInfo();
+                return;
+            case "!version" or "!v":
+                ShowVersion();
+                return;
+            case "!update":
+                Recast();
+                return;
+            case "!mirror":
+                ShowMirror();
+                return;
+            case "!rank":
+                ShowRank(player?.Name ?? username);
                 return;
             case "!skip":
                 OnSkipCommand(player, command.Argument);
