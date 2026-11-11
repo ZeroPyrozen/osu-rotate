@@ -1,0 +1,44 @@
+# systemd unit for osu-rotate, installed to /etc/systemd/system/osu-rotate.service by pi-install.sh.
+# Settings and secrets belong in /etc/osu-rotate/secrets.env, not here (this file is overwritten
+# on every deploy). For one-off overrides use: sudo systemctl edit osu-rotate
+[Unit]
+Description=osu-rotate multiplayer host rotator
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+# The app tells systemd when Kestrel is listening (AddSystemd() in Program.cs).
+Type=notify
+User=osu-rotate
+Group=osu-rotate
+WorkingDirectory=/opt/osu-rotate/current
+ExecStart=/opt/osu-rotate/current/OsuRotate.Web
+Environment=ASPNETCORE_ENVIRONMENT=Production
+# Loopback only: the dashboard is reached through Cloudflare Tunnel. pi-install.sh health-checks this port.
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5180
+Environment=DataProtection__KeysPath=/var/lib/osu-rotate/keys
+EnvironmentFile=/etc/osu-rotate/secrets.env
+# Creates /var/lib/osu-rotate, owned by the service user.
+StateDirectory=osu-rotate
+StateDirectoryMode=0750
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+MemoryMax=768M
+SyslogIdentifier=osu-rotate
+
+# Hardening: the app can only write to /var/lib/osu-rotate and its private /tmp.
+# MemoryDenyWriteExecute is deliberately absent because the .NET JIT needs it off.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

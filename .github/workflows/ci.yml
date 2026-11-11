@@ -1,0 +1,38 @@
+# Builds and tests on every push to main and every pull request. Deploying to the Pi is done
+# from your own machine with deploy/deploy.ps1.
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # Linux, like the Pi: catches file-name casing mistakes that Windows hides.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Build
+        run: dotnet build OsuRotate.slnx --configuration Release
+
+      - name: Test
+        run: dotnet test --solution OsuRotate.slnx --configuration Release --no-build
+
+      - name: Test the deploy script
+        run: bash deploy/tests/pi-install.test.sh
+
+      - name: Publish for Raspberry Pi (linux-arm64)
+        run: dotnet publish src/OsuRotate.Web/OsuRotate.Web.csproj --configuration Release --runtime linux-arm64 --self-contained --output ${{ runner.temp }}/osu-rotate-linux-arm64

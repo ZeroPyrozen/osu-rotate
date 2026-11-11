@@ -1,0 +1,9 @@
+﻿@page "/"
+@using OsuRotate.Application
+@inject ILobbyStatusReader LobbyStatus
+
+<PageTitle>osu-rotate</PageTitle>
+
+<h1>osu-rotate</h1>
+
+<p>Lobby status: <strong>@LobbyStatus.Current</strong></p>

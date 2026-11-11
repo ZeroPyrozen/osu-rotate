@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/OsuRotate.Application/OsuRotate.Application.csproj" />
+    <Project Path="src/OsuRotate.Domain/OsuRotate.Domain.csproj" />
+    <Project Path="src/OsuRotate.Infrastructure/OsuRotate.Infrastructure.csproj" />
+    <Project Path="src/OsuRotate.Web/OsuRotate.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OsuRotate.Architecture.Tests/OsuRotate.Architecture.Tests.csproj" />
+    <Project Path="tests/OsuRotate.Web.Tests/OsuRotate.Web.Tests.csproj" />
+  </Folder>
+</Solution>
