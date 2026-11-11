@@ -27,8 +27,19 @@ public sealed partial class LobbyEngine
 
     private void AutoStartOnBeatmapChanged(int beatmapId)
     {
-        // A lone player starts when they like, and the map just played does not start itself again.
-        if (!AutoStartActive || Room.Players.Count == 1 || beatmapId == _lastPlayedBeatmapId)
+        // With the regulation on, only an accepted map starts the wait.
+        if (!Regulation.Enabled && beatmapId != _lastPlayedBeatmapId)
+        {
+            BeginAutoStart();
+        }
+    }
+
+    private void AutoStartOnMapAccepted() => BeginAutoStart();
+
+    private void BeginAutoStart()
+    {
+        // A lone player starts when they like.
+        if (!AutoStartActive || Room.Players.Count == 1)
         {
             return;
         }

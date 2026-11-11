@@ -51,9 +51,10 @@ public class AutoStartTests
         public void Nothing_happens_when_disabled()
         {
             var lobby = Create(enabled: false);
-            var before = lobby.Sent.Count;
             lobby.ChangeMap();
-            Assert.Equal(before, lobby.Sent.Count);
+            Assert.False(lobby.Engine.IsStartTimerRunning);
+            Assert.Equal(0, lobby.SentCount<ClearHost>());
+            Assert.Empty(lobby.Said);
         }
 
         [Fact]

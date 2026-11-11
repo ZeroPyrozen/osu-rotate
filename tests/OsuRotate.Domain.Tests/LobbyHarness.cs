@@ -41,10 +41,18 @@ internal sealed class LobbyHarness
 
     public void Run(Func<IReadOnlyList<LobbyCommand>> action)
     {
+        // The engine and this fake room answering each other forever is a bug: fail instead of spinning.
+        const int MaxReplies = 1000;
         var pending = new Queue<LobbyEvent>();
+        var replies = 0;
         Process(action());
         while (pending.TryDequeue(out var next))
         {
+            if (++replies > MaxReplies)
+            {
+                Assert.Fail($"The engine and the room kept answering each other; last event: {next}");
+            }
+
             Process(Engine.Handle(next));
         }
 
@@ -185,6 +193,36 @@ internal sealed class LobbyHarness
 
     public IReadOnlyList<string> Players => _players;
 
+    // What the beatmap catalog answers. Maps missing here are an ordinary 5 star, 2 minute osu! map.
+    public Dictionary<int, BeatmapLookup> Beatmaps { get; } = [];
+
+    // While false, lookups wait for AnswerLookups, as when the osu! API is slow.
+    public bool AnswerLookupsAtOnce { get; set; } = true;
+
+    public List<LookUpBeatmap> PendingLookups { get; } = [];
+
+    public static BeatmapInfo Map(int id, double stars = 5, int seconds = 120, GameMode mode = GameMode.Osu) =>
+        new(id, id * 10, $"title {id}", mode, stars, seconds, "ranked");
+
+    public void AnswerLookups()
+    {
+        var lookups = PendingLookups.ToList();
+        PendingLookups.Clear();
+        foreach (var lookup in lookups)
+        {
+            Feed(new BeatmapLookedUp(lookup.BeatmapId, Lookup(lookup.BeatmapId)));
+        }
+    }
+
+    // The host picking a map in the game.
+    public void PickMap(int id)
+    {
+        Feed(new BeatmapChanging());
+        Feed(new BeatmapChanged(id, $"title {id}", false));
+    }
+
+    private BeatmapLookup Lookup(int id) => Beatmaps.TryGetValue(id, out var lookup) ? lookup : BeatmapLookup.Found(Map(id));
+
     // Each finisher's score; players left out never finish, as when they lack the map.
     public void FinishMatchWith(params (string Name, long Score)[] scores)
     {
@@ -284,6 +322,15 @@ internal sealed class LobbyHarness
 
                 yield return new PlayerLeft(c.Username);
                 yield return new PlayerKicked(c.Username);
+                break;
+            case LookUpBeatmap c when AnswerLookupsAtOnce:
+                yield return new BeatmapLookedUp(c.BeatmapId, Lookup(c.BeatmapId));
+                break;
+            case LookUpBeatmap c:
+                PendingLookups.Add(c);
+                break;
+            case SetBeatmap c:
+                yield return new BeatmapChanged(c.BeatmapId, $"title {c.BeatmapId}", true);
                 break;
             case AbortCountdown:
                 yield return new CountdownAborted();

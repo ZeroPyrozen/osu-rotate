@@ -82,6 +82,9 @@ public sealed record NoUserSpecified : LobbyEvent;
 public sealed record BeatmapChanging : LobbyEvent;
 public sealed record BeatmapChanged(int BeatmapId, string Title, bool ChangedByReferee) : LobbyEvent;
 public sealed record InvalidBeatmapId : LobbyEvent;
+
+// The application's answer to LookUpBeatmap.
+public sealed record BeatmapLookedUp(int BeatmapId, BeatmapLookup Result) : LobbyEvent;
 public sealed record InvalidSettings : LobbyEvent;
 public sealed record InvalidSize : LobbyEvent;
 

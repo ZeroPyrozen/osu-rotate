@@ -44,6 +44,8 @@ public sealed record LobbySettings
     public double StuckMatchFinishedShare { get; init; } = 0.5;
     public TimeSpan StuckMatchDelay { get; init; } = TimeSpan.FromSeconds(30);
     public bool AbortStuckMatch { get; init; } = true;
+
+    public MapRegulation Regulation { get; init; } = new();
 }
 
 // The lobby's rules. Takes one input at a time and returns the commands for Bancho. It does no I/O
@@ -147,6 +149,7 @@ public sealed partial class LobbyEngine
                     Rotation.OnHostChanged(host);
                     VotesOnHostChanged();
                     StartHostAfkCheck(first: true);
+                    MapsOnHostChanged();
                 }
                 else
                 {
@@ -165,6 +168,7 @@ public sealed partial class LobbyEngine
 
             case BeatmapChanging:
                 Rotation.OnBeatmapChanging();
+                MapsOnBeatmapChanging();
                 StartHostAfkCheck(first: false);
                 AutoStartOnBeatmapChanging();
                 break;
@@ -173,7 +177,12 @@ public sealed partial class LobbyEngine
                 Room.BeatmapId = e.BeatmapId;
                 _mapChangedSinceMatch = true;
                 StartHostAfkCheck(first: false);
+                MapsOnBeatmapChanged(e.BeatmapId, e.Title);
                 AutoStartOnBeatmapChanged(e.BeatmapId);
+                break;
+
+            case BeatmapLookedUp e:
+                MapsOnLookedUp(e.BeatmapId, e.Result);
                 break;
 
             case MatchStarted:
@@ -181,6 +190,7 @@ public sealed partial class LobbyEngine
                 Rotation.OnMatchStarted();
                 VotesOnMatchStarted();
                 AfkOnMatchStarted();
+                MapsOnMatchStarted();
                 _lastPlayedBeatmapId = Room.BeatmapId;
                 break;
 
@@ -345,6 +355,9 @@ public sealed partial class LobbyEngine
             case "!q" or "!queue":
                 ShowQueue();
                 return;
+            case "!r" or "!regulation":
+                ShowRegulation();
+                return;
             case "!skip":
                 OnSkipCommand(player, command.Argument);
                 return;
@@ -374,6 +387,9 @@ public sealed partial class LobbyEngine
                 break;
             case "*abort" when Room.IsMatching:
                 AbortMatchNow();
+                break;
+            case "*regulation" or "*no" or "*mapchecker_enable" or "*mapchecker_disable":
+                ChangeRegulation(command.Name, command.Argument);
                 break;
             case "*afkkick_enable":
                 UpdateSettings(_settings with { AfkKickEnabled = true });

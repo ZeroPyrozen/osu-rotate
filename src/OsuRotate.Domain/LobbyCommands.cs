@@ -29,6 +29,10 @@ public sealed record KickPlayer(string Username) : LobbyCommand;
 public sealed record InvitePlayer(string Username) : LobbyCommand;
 
 // Text after a | in !mp map is shown to players, which is how map details reach the lobby.
+// Answered by the application, not Bancho: look the beatmap up (IBeatmapCatalog) and feed the result
+// back as BeatmapLookedUp. Never send it to the transport.
+public sealed record LookUpBeatmap(int BeatmapId, GameMode Mode, bool AllowConvert) : LobbyCommand;
+
 public sealed record SetBeatmap(int BeatmapId, int? GameMode = null, string? Note = null) : LobbyCommand;
 public sealed record SetMods(string Mods) : LobbyCommand;
 public sealed record SetRoomName(string Name) : LobbyCommand;
