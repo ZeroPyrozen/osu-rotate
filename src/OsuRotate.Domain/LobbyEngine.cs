@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace OsuRotate.Domain;
@@ -21,6 +22,28 @@ public sealed record LobbySettings
     public bool StartWhenAllReady { get; init; } = true;
     public VoteRule AbortVote { get; init; } = new(0.3, 2);
     public TimeSpan VoteMessageDelay { get; init; } = TimeSpan.FromSeconds(5);
+
+    // How long BanchoBot may take to answer a !stat.
+    public TimeSpan StatReplyTimeout { get; init; } = TimeSpan.FromSeconds(5);
+
+    // The host AFK check. Zero interval turns it off.
+    public TimeSpan HostAfkFirstCheck { get; init; } = TimeSpan.FromSeconds(45);
+    public TimeSpan HostAfkCheckInterval { get; init; } = TimeSpan.FromSeconds(90);
+    public bool SkipAfkHost { get; init; } = true;
+
+    public bool AfkKickEnabled { get; init; } = true;
+    public int AfkKickThreshold { get; init; } = 6;
+    public TimeSpan AfkKickCooldown { get; init; } = TimeSpan.FromSeconds(30);
+
+    public bool AutoStartEnabled { get; init; }
+    public bool AutoStartClearsHost { get; init; }
+    public TimeSpan AutoStartDelay { get; init; } = TimeSpan.FromSeconds(90);
+
+    // Once this share of players has finished, a match still running after the delay is checked. Zero
+    // delay turns it off.
+    public double StuckMatchFinishedShare { get; init; } = 0.5;
+    public TimeSpan StuckMatchDelay { get; init; } = TimeSpan.FromSeconds(30);
+    public bool AbortStuckMatch { get; init; } = true;
 }
 
 // The lobby's rules. Takes one input at a time and returns the commands for Bancho. It does no I/O
@@ -31,7 +54,7 @@ public sealed partial class LobbyEngine
     private const string RoomStateKey = "room-state";
     private const string HostTransferTimer = "host-transfer";
 
-    private readonly LobbySettings _settings;
+    private LobbySettings _settings;
     private readonly TimeProvider _time;
     private readonly List<LobbyCommand> _output = [];
     private readonly Dictionary<string, DateTimeOffset> _lastSent = [];
@@ -46,6 +69,17 @@ public sealed partial class LobbyEngine
         StartVotes = new VoteCounter(settings.StartVote);
         AbortVotes = new VoteCounter(settings.AbortVote);
         Rotation = new HostRotation(Room, DenyList, _output.Add);
+    }
+
+    public LobbySettings Settings => _settings;
+
+    // Rules can change while the lobby runs. Running timers keep their old delay.
+    public void UpdateSettings(LobbySettings settings)
+    {
+        _settings = settings;
+        SkipVotes.Rule = settings.SkipVote;
+        StartVotes.Rule = settings.StartVote;
+        AbortVotes.Rule = settings.AbortVote;
     }
 
     public Room Room { get; } = new();
@@ -72,6 +106,7 @@ public sealed partial class LobbyEngine
                 {
                     Rotation.OnPlayerJoined(joined);
                     VotesOnPlayerJoined(joined);
+                    AfkOnPlayerJoined(joined);
                 }
                 else
                 {
@@ -87,6 +122,8 @@ public sealed partial class LobbyEngine
                 {
                     Rotation.OnPlayerLeft(left, fromRoomState: false);
                     VotesOnPlayerLeft(left, leftWasHost);
+                    AfkOnPlayerLeft(left);
+                    CheckStuckMatch();
                 }
                 else
                 {
@@ -109,6 +146,7 @@ public sealed partial class LobbyEngine
                 {
                     Rotation.OnHostChanged(host);
                     VotesOnHostChanged();
+                    StartHostAfkCheck(first: true);
                 }
                 else
                 {
@@ -127,16 +165,23 @@ public sealed partial class LobbyEngine
 
             case BeatmapChanging:
                 Rotation.OnBeatmapChanging();
+                StartHostAfkCheck(first: false);
+                AutoStartOnBeatmapChanging();
                 break;
 
             case BeatmapChanged e:
                 Room.BeatmapId = e.BeatmapId;
+                _mapChangedSinceMatch = true;
+                StartHostAfkCheck(first: false);
+                AutoStartOnBeatmapChanged(e.BeatmapId);
                 break;
 
             case MatchStarted:
                 Room.StartMatch();
                 Rotation.OnMatchStarted();
                 VotesOnMatchStarted();
+                AfkOnMatchStarted();
+                _lastPlayedBeatmapId = Room.BeatmapId;
                 break;
 
             case AllPlayersReady when _settings.StartWhenAllReady:
@@ -157,12 +202,18 @@ public sealed partial class LobbyEngine
                 if (!Room.Contains(finisher))
                 {
                     RequestRoomState();
+                    break;
                 }
+
+                AfkOnPlayerFinished(finisher, e.Score);
+                CheckStuckMatch();
 
                 break;
 
             case MatchFinished:
                 Room.EndMatch();
+                StopStuckMatchCheck();
+                AfkOnMatchFinished();
                 Rotation.OnMatchFinished();
                 if (_settings.ShowQueueAfterMatch)
                 {
@@ -176,6 +227,13 @@ public sealed partial class LobbyEngine
             case MatchAborted:
             case MatchNotInProgress when Room.IsMatching:
                 Rotation.OnMatchAborted(Room.EndMatch());
+                StopStuckMatchCheck();
+                AfkOnMatchAborted();
+                break;
+
+            case PlayerStatReceived e:
+                AfkOnStat(e.Stat, e.ViaPrivateMessage);
+                StuckMatchOnStat(e.Stat);
                 break;
 
             case RoomStateReceived e:
@@ -263,7 +321,11 @@ public sealed partial class LobbyEngine
 
     private void HandleChat(string username, string text)
     {
-        var isOwner = Player.KeyOf(username) == Player.KeyOf(_settings.OwnerName);
+        var isOwner = IsOwner(username);
+        if (Room.Find(username) is { } speaker && Room.Contains(speaker))
+        {
+            AfkOnChat(speaker);
+        }
 
         // The owner is a referee, so Bancho runs their !mp commands itself.
         if (isOwner && text.StartsWith("!mp", StringComparison.OrdinalIgnoreCase))
@@ -313,6 +375,33 @@ public sealed partial class LobbyEngine
             case "*abort" when Room.IsMatching:
                 AbortMatchNow();
                 break;
+            case "*afkkick_enable":
+                UpdateSettings(_settings with { AfkKickEnabled = true });
+                break;
+            case "*afkkick_disable":
+                UpdateSettings(_settings with { AfkKickEnabled = false });
+                break;
+            case "*afkkick_threshold" when int.TryParse(command.Argument, CultureInfo.InvariantCulture, out var threshold):
+                UpdateSettings(_settings with { AfkKickThreshold = Math.Max(threshold, 1) });
+                break;
+            case "*afkkick_cooltime" when int.TryParse(command.Argument, CultureInfo.InvariantCulture, out var cooldownSeconds):
+                UpdateSettings(_settings with { AfkKickCooldown = TimeSpan.FromSeconds(Math.Max(cooldownSeconds, 10)) });
+                break;
+            case "*autostart_enable" when !Room.IsMatching:
+                UpdateSettings(_settings with { AutoStartEnabled = true });
+                break;
+            case "*autostart_disable" when !Room.IsMatching:
+                UpdateSettings(_settings with { AutoStartEnabled = false });
+                break;
+            case "*autostart_time" when !Room.IsMatching && int.TryParse(command.Argument, CultureInfo.InvariantCulture, out var delaySeconds):
+                UpdateSettings(_settings with { AutoStartDelay = TimeSpan.FromSeconds(Math.Max(delaySeconds, (int)MinimumAutoStartDelay.TotalSeconds)) });
+                break;
+            case "*autostart_clearhost_enable" when !Room.IsMatching:
+                UpdateSettings(_settings with { AutoStartClearsHost = true });
+                break;
+            case "*autostart_clearhost_disable" when !Room.IsMatching:
+                UpdateSettings(_settings with { AutoStartClearsHost = false });
+                break;
             case "*reorder" or "*order" when command.Argument.Length > 0:
                 Reorder(command.Argument);
                 break;
@@ -356,6 +445,8 @@ public sealed partial class LobbyEngine
 
         _output.Add(new Say($"Host order: {names}", CommandPriority.Info, QueueMessageKey));
     }
+
+    private bool IsOwner(string username) => Player.KeyOf(username) == Player.KeyOf(_settings.OwnerName);
 
     private void Announce(string text) => _output.Add(new Say(text));
 

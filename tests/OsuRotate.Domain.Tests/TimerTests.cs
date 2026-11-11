@@ -95,7 +95,7 @@ public class TimerTests
     // and the player is still in the room, the bot asks for !mp settings.
     public class HostTransferTimeout
     {
-        private readonly LobbyHarness _lobby = new();
+        private readonly LobbyHarness _lobby = new(s => s with { HostAfkCheckInterval = TimeSpan.Zero });
 
         private int RoomStateRequests => _lobby.Sent.OfType<RequestRoomState>().Count();
 

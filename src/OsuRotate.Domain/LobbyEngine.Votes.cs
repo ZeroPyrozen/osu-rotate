@@ -138,6 +138,7 @@ public sealed partial class LobbyEngine
 
     private void SkipHost()
     {
+        StopHostAfkCheck();
         _hostChangedAt = _time.GetUtcNow();
         Rotation.Skip();
     }
@@ -205,7 +206,7 @@ public sealed partial class LobbyEngine
         StartVotes.Clear();
     }
 
-    private void StartMatchIn(int seconds)
+    private void StartMatchIn(int seconds, bool withHint = false)
     {
         if (seconds == 0)
         {
@@ -214,7 +215,7 @@ public sealed partial class LobbyEngine
         }
 
         CancelOwnStartTimers();
-        Announce($"Queued the match to start in {CountdownText(seconds)}");
+        Announce($"Queued the match to start in {CountdownText(seconds)}{(withHint ? ". (Host can stop the timer with !stop command.)" : string.Empty)}");
         Timers.Start(MatchStartTimer, TimeSpan.FromSeconds(seconds), StartMatchNow);
         if (seconds > 15)
         {
@@ -276,7 +277,11 @@ public sealed partial class LobbyEngine
         }
     }
 
-    private void AbortMatchNow() => _output.Add(new AbortMatch());
+    private void AbortMatchNow()
+    {
+        StopStuckMatchCheck();
+        _output.Add(new AbortMatch());
+    }
 
     public static string CountdownText(int seconds)
     {

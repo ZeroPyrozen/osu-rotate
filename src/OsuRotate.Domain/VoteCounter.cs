@@ -7,9 +7,11 @@ public sealed record VoteRule(double Share, int Minimum);
 // until Clear, so late votes cannot trigger the action twice.
 public sealed class VoteCounter(VoteRule rule)
 {
+    public VoteRule Rule { get; set; } = rule;
+
     private readonly Dictionary<Player, bool> _voters = [];
 
-    public int Required => (int)Math.Ceiling(Math.Max(_voters.Count * rule.Share, rule.Minimum));
+    public int Required => (int)Math.Ceiling(Math.Max(_voters.Count * Rule.Share, Rule.Minimum));
     public int Count => _voters.Values.Count(voted => voted);
     public bool Passed { get; private set; }
 

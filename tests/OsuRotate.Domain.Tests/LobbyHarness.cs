@@ -78,9 +78,17 @@ internal sealed class LobbyHarness
     }
 
     // Moves the clock on and fires whatever timers fall due, the way the phase 4 runner will.
+    // Like the runner, wakes at each due time on the way rather than jumping past them.
     public void Wait(TimeSpan by)
     {
-        Time.Advance(by);
+        var until = Time.GetUtcNow() + by;
+        while (Engine.NextDue is { } due && due <= until)
+        {
+            Time.Advance(due > Time.GetUtcNow() ? due - Time.GetUtcNow() : TimeSpan.Zero);
+            Run(Engine.Tick);
+        }
+
+        Time.Advance(until - Time.GetUtcNow());
         Run(Engine.Tick);
     }
 
@@ -172,6 +180,27 @@ internal sealed class LobbyHarness
 
     public bool IsMatching => _matching;
 
+    // What BanchoBot answers to !stat. Players missing here get no answer.
+    public Dictionary<string, PlayerActivity> Stats { get; } = [];
+
+    public IReadOnlyList<string> Players => _players;
+
+    // Each finisher's score; players left out never finish, as when they lack the map.
+    public void FinishMatchWith(params (string Name, long Score)[] scores)
+    {
+        foreach (var (name, score) in scores)
+        {
+            Feed(new PlayerFinished(name, score, score > 0));
+        }
+
+        _matching = false;
+        Feed(new MatchFinished());
+    }
+
+    // A player typing !stat in the room, which BanchoBot answers in the room.
+    public void PublicStat(string name, PlayerActivity activity) =>
+        Feed(new PlayerStatReceived(new PlayerStat(name, 1, activity, 0, 0, 0, 0, 0), ViaPrivateMessage: false));
+
     public int SentCount<T>() where T : LobbyCommand => Sent.OfType<T>().Count();
 
     public void Chat(string name, string text) => Feed(new ChatReceived(name, text, false));
@@ -243,6 +272,18 @@ internal sealed class LobbyHarness
             case Domain.AbortMatch:
                 yield return _matching ? new MatchAborted() : new MatchNotInProgress();
                 _matching = false;
+                break;
+            case RequestStat c when Stats.TryGetValue(c.Username, out var activity):
+                yield return new PlayerStatReceived(new PlayerStat(c.Username, 1, activity, 0, 0, 0, 0, 0), c.ViaPrivateMessage);
+                break;
+            case KickPlayer c when _players.Remove(c.Username):
+                if (_host == c.Username)
+                {
+                    _host = null;
+                }
+
+                yield return new PlayerLeft(c.Username);
+                yield return new PlayerKicked(c.Username);
                 break;
             case AbortCountdown:
                 yield return new CountdownAborted();
