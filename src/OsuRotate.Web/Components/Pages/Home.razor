@@ -1,5 +1,6 @@
-﻿@page "/"
+@page "/"
 @using OsuRotate.Application
+@attribute [Authorize(Policy = OsuRotate.Web.Auth.OwnerAuthentication.OwnerPolicy)]
 @inject ILobbyStatusReader LobbyStatus
 
 <PageTitle>osu-rotate</PageTitle>
@@ -7,3 +8,11 @@
 <h1>osu-rotate</h1>
 
 <p>Lobby status: <strong>@LobbyStatus.Current</strong></p>
+
+<AuthorizeView>
+    <p>Signed in as <strong>@context.User.Identity?.Name</strong>.</p>
+    <form method="post" action="signout" data-enhance="false">
+        <AntiforgeryToken />
+        <button type="submit">Sign out</button>
+    </form>
+</AuthorizeView>

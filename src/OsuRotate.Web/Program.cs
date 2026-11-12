@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.DataProtection;
 using OsuRotate.Infrastructure;
+using OsuRotate.Web.Auth;
 using OsuRotate.Web.Bot;
 using OsuRotate.Web.Components;
 
@@ -10,6 +11,7 @@ builder.Services.AddSystemd();
 builder.Services.AddHealthChecks();
 builder.Services.AddInfrastructure();
 builder.Services.AddBot(builder.Configuration, builder.Environment);
+builder.Services.AddOwnerLogin(builder.Configuration, builder.Environment);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
@@ -30,10 +32,14 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 
 // No HTTPS redirection or HSTS here: Kestrel is on loopback and Cloudflare terminates TLS.
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
 
-app.MapHealthChecks("/healthz");
-app.MapStaticAssets();
+// Everything else needs the owner (the fallback policy in AddOwnerLogin).
+app.MapHealthChecks("/healthz").AllowAnonymous();
+app.MapStaticAssets().AllowAnonymous();
+app.MapOwnerLogin();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

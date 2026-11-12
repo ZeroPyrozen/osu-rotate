@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Sockets;
+using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
@@ -13,16 +15,19 @@ using OsuRotate.Web.Bot;
 namespace OsuRotate.Web.Tests;
 
 // The web host with the bot in it, on a throwaway database. IRC credentials are cleared unless a test
-// sets them, so nothing here can reach the real Bancho.
+// sets them, and every call to osu.ppy.sh goes to FakeOsu, so nothing here reaches the real services.
 public sealed class BotFactory : WebApplicationFactory<Program>
 {
     private readonly Dictionary<string, string> _settings = new()
     {
         ["Bancho:Nick"] = string.Empty,
         ["Bancho:Password"] = string.Empty,
-        ["Osu:ClientId"] = "0",
-        ["Osu:ClientSecret"] = string.Empty,
+        ["Osu:ClientId"] = "7",
+        ["Osu:ClientSecret"] = "app-secret",
+        ["Dashboard:OwnerUserId"] = FakeOsu.OwnerId.ToString(System.Globalization.CultureInfo.InvariantCulture),
     };
+
+    public FakeOsu Osu { get; } = new();
 
     public BotFactory()
     {
@@ -49,6 +54,32 @@ public sealed class BotFactory : WebApplicationFactory<Program>
         {
             builder.UseSetting(key, value);
         }
+
+        builder.ConfigureTestServices(services =>
+        {
+            services.PostConfigure<OAuthOptions>(Auth.OwnerAuthentication.OsuScheme, options => options.Backchannel = new HttpClient(Osu, disposeHandler: false));
+            services.AddHttpClient("osu").ConfigurePrimaryHttpMessageHandler(() => Osu);
+        });
+    }
+
+    // A browser on https://localhost that does not follow redirects.
+    public HttpClient Browser() => CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, BaseAddress = new Uri("https://localhost") });
+
+    // Goes through osu!'s login as the given user. Returns the browser and the callback's response.
+    public async Task<(HttpClient Browser, HttpResponseMessage Callback)> LogInAsync(int userId = FakeOsu.OwnerId, string returnPath = "/")
+    {
+        Osu.MeId = userId;
+        var browser = Browser();
+        var challenge = await browser.GetAsync(new Uri(returnPath, UriKind.Relative));
+        var state = StateFrom(challenge);
+        var callback = await browser.GetAsync(new Uri($"/signin-osu?code=the-code&state={Uri.EscapeDataString(state)}", UriKind.Relative));
+        return (browser, callback);
+    }
+
+    public static string StateFrom(HttpResponseMessage challenge)
+    {
+        var location = challenge.Headers.Location ?? throw new InvalidOperationException($"No redirect: {challenge.StatusCode}");
+        return System.Web.HttpUtility.ParseQueryString(location.Query)["state"] ?? throw new InvalidOperationException("No state.");
     }
 
     // Separate from Dispose, so a test can stop the host and still read the database.
@@ -99,7 +130,8 @@ public sealed class HostTests : IDisposable
     [Fact]
     public async Task Home_page_shows_status_from_the_inner_layers()
     {
-        var html = await _factory.CreateClient().GetStringAsync(new Uri("/", UriKind.Relative));
+        var (browser, _) = await _factory.LogInAsync();
+        var html = await browser.GetStringAsync(new Uri("/", UriKind.Relative));
 
         Assert.Contains("Lobby status: <strong>Idle</strong>", html, StringComparison.Ordinal);
     }
