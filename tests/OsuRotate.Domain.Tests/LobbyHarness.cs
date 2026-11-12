@@ -1,0 +1,388 @@
+using OsuRotate.Domain;
+
+namespace OsuRotate.Domain.Tests;
+
+internal sealed class ManualTime : TimeProvider
+{
+    private DateTimeOffset _now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+    public override DateTimeOffset GetUtcNow() => _now;
+
+    public void Advance(TimeSpan by) => _now += by;
+}
+
+// Drives a LobbyEngine with a fake room that answers commands the way Bancho does. While Holding,
+// Bancho's answers wait until Release, which replays osu-ahr's latency races deterministically.
+internal sealed class LobbyHarness
+{
+    public const string Owner = "creator";
+
+    private readonly List<string> _players = [];
+    private readonly Queue<LobbyEvent> _held = new();
+    private string? _host;
+    private bool _matching;
+    private int _nextBeatmap = 100;
+
+    public LobbyHarness(Func<LobbySettings, LobbySettings>? configure = null)
+    {
+        var settings = new LobbySettings { OwnerName = Owner };
+        Engine = new LobbyEngine(configure?.Invoke(settings) ?? settings, Time);
+    }
+
+    public ManualTime Time { get; } = new();
+    public LobbyEngine Engine { get; }
+    public List<LobbyCommand> Sent { get; } = [];
+    public bool Holding { get; set; }
+
+    public IReadOnlyList<string> Queue => [.. Engine.Rotation.Queue.Select(p => p.Name)];
+    public IEnumerable<string> Said => Sent.OfType<Say>().Select(s => s.Text);
+
+    public void Feed(LobbyEvent lobbyEvent) => Run(() => Engine.Handle(lobbyEvent));
+
+    public void Run(Func<IReadOnlyList<LobbyCommand>> action)
+    {
+        // The engine and this fake room answering each other forever is a bug: fail instead of spinning.
+        const int MaxReplies = 1000;
+        var pending = new Queue<LobbyEvent>();
+        var replies = 0;
+        Process(action());
+        while (pending.TryDequeue(out var next))
+        {
+            if (++replies > MaxReplies)
+            {
+                Assert.Fail($"The engine and the room kept answering each other; last event: {next}");
+            }
+
+            Process(Engine.Handle(next));
+        }
+
+        void Process(IReadOnlyList<LobbyCommand> commands)
+        {
+            foreach (var command in commands)
+            {
+                Sent.Add(command);
+                foreach (var reply in Answer(command))
+                {
+                    (Holding ? _held : pending).Enqueue(reply);
+                }
+            }
+        }
+    }
+
+    public void Release()
+    {
+        Holding = false;
+        while (_held.TryDequeue(out var reply))
+        {
+            Feed(reply);
+        }
+    }
+
+    // Bancho never answers what it was holding back.
+    public void Drop()
+    {
+        Holding = false;
+        _held.Clear();
+    }
+
+    // Moves the clock on and fires whatever timers fall due, the way the phase 4 runner will.
+    // Like the runner, wakes at each due time on the way rather than jumping past them.
+    public void Wait(TimeSpan by)
+    {
+        var until = Time.GetUtcNow() + by;
+        while (Engine.NextDue is { } due && due <= until)
+        {
+            Time.Advance(due > Time.GetUtcNow() ? due - Time.GetUtcNow() : TimeSpan.Zero);
+            Run(Engine.Tick);
+        }
+
+        Time.Advance(until - Time.GetUtcNow());
+        Run(Engine.Tick);
+    }
+
+    public string[] AddPlayers(params string[] names)
+    {
+        foreach (var name in names)
+        {
+            _players.Add(name);
+            Feed(new PlayerJoined(name, _players.Count, Team.None));
+        }
+
+        return names;
+    }
+
+    public string[] AddPlayers(int count) => AddPlayers([.. Enumerable.Range(_players.Count, count).Select(i => $"p{i}")]);
+
+    public void RemovePlayer(string name)
+    {
+        _players.Remove(name);
+        if (_host == name)
+        {
+            _host = null;
+        }
+
+        Feed(new PlayerLeft(name));
+    }
+
+    public void ChangeMap()
+    {
+        Feed(new BeatmapChanging());
+        Feed(new BeatmapChanged(_nextBeatmap++, "artist - title [diff]", false));
+    }
+
+    public void StartMatch()
+    {
+        _matching = true;
+        Feed(new MatchStarted());
+    }
+
+    public void FinishMatch()
+    {
+        foreach (var player in _players.ToList())
+        {
+            Feed(new PlayerFinished(player, 100000, true));
+        }
+
+        _matching = false;
+        Feed(new MatchFinished());
+    }
+
+    public void PlayMatch()
+    {
+        StartMatch();
+        FinishMatch();
+    }
+
+    // Bancho announces the abort itself, as when the host or a referee aborts.
+    public void AbortMatch(params string[] finishers)
+    {
+        foreach (var player in finishers)
+        {
+            Feed(new PlayerFinished(player, 100000, true));
+        }
+
+        _matching = false;
+        Feed(new MatchAborted());
+    }
+
+    public void PlayMatchAndAbort(params string[] finishers)
+    {
+        StartMatch();
+        AbortMatch(finishers);
+    }
+
+    // A player handing host over in the game, not the bot.
+    public void ChangeHostManually(string name)
+    {
+        _host = name;
+        Feed(new HostChanged(name));
+    }
+
+    public void ApplyRoomState(RoomState state)
+    {
+        _players.Clear();
+        _players.AddRange(state.Players.OrderBy(p => p.Slot).Select(p => p.Username));
+        _host = state.Players.FirstOrDefault(p => p.IsHost)?.Username;
+        Feed(new RoomStateReceived(state));
+    }
+
+    public bool IsMatching => _matching;
+
+    // The room settings the fake room reports in !mp settings, changed by the bot's !mp commands.
+    public string RoomName { get; set; } = "room";
+    public string TeamModeText { get; set; } = "HeadToHead";
+    public string WinCondition { get; set; } = "Score";
+    public string ActiveMods { get; set; } = "Freemod";
+    public int? Size { get; set; }
+    public string? Password { get; set; }
+
+    // Where each player sits when !mp settings is asked for. Players missing here sit in join order.
+    public Dictionary<string, int> Slots { get; } = [];
+
+    // What BanchoBot answers to !stat. Players missing here get no answer.
+    public Dictionary<string, PlayerActivity> Stats { get; } = [];
+
+    public IReadOnlyList<string> Players => _players;
+
+    // What the beatmap catalog answers. Maps missing here are an ordinary 5 star, 2 minute osu! map.
+    public Dictionary<int, BeatmapLookup> Beatmaps { get; } = [];
+
+    // While false, lookups wait for AnswerLookups, as when the osu! API is slow.
+    public bool AnswerLookupsAtOnce { get; set; } = true;
+
+    public List<LookUpBeatmap> PendingLookups { get; } = [];
+
+    public static BeatmapInfo Map(int id, double stars = 5, int seconds = 120, GameMode mode = GameMode.Osu) =>
+        new(id, id * 10, $"title {id}", mode, stars, seconds, "ranked");
+
+    public void AnswerLookups()
+    {
+        var lookups = PendingLookups.ToList();
+        PendingLookups.Clear();
+        foreach (var lookup in lookups)
+        {
+            Feed(new BeatmapLookedUp(lookup.BeatmapId, Lookup(lookup.BeatmapId)));
+        }
+    }
+
+    // The host picking a map in the game.
+    public void PickMap(int id)
+    {
+        Feed(new BeatmapChanging());
+        Feed(new BeatmapChanged(id, $"title {id}", false));
+    }
+
+    private BeatmapLookup Lookup(int id) => Beatmaps.TryGetValue(id, out var lookup) ? lookup : BeatmapLookup.Found(Map(id));
+
+    // Each finisher's score; players left out never finish, as when they lack the map.
+    public void FinishMatchWith(params (string Name, long Score)[] scores)
+    {
+        foreach (var (name, score) in scores)
+        {
+            Feed(new PlayerFinished(name, score, score > 0));
+        }
+
+        _matching = false;
+        Feed(new MatchFinished());
+    }
+
+    // A player typing !stat in the room, which BanchoBot answers in the room.
+    public void PublicStat(string name, PlayerActivity activity) =>
+        Feed(new PlayerStatReceived(new PlayerStat(name, 1, activity, 0, 0, 0, 0, 0), ViaPrivateMessage: false));
+
+    public int SentCount<T>() where T : LobbyCommand => Sent.OfType<T>().Count();
+
+    public void Chat(string name, string text) => Feed(new ChatReceived(name, text, false));
+
+    public void AssertHost(string name)
+    {
+        Assert.Equal(name, Engine.Room.Host?.Name);
+        Assert.Equal(name, _host);
+    }
+
+    public void AssertNoHost()
+    {
+        Assert.Null(Engine.Room.Host);
+        Assert.Null(_host);
+    }
+
+    // The states osu-ahr's tests use: s0 empty, s1 no host yet, hr host who rotates after the
+    // next match, hn host who keeps the turn once more, m match in progress.
+    public void AssertState(string state)
+    {
+        var rotation = Engine.Rotation;
+        var room = Engine.Room;
+        switch (state)
+        {
+            case "s0":
+                Assert.Empty(rotation.Queue);
+                break;
+            case "s1":
+                Assert.NotEmpty(rotation.Queue);
+                Assert.False(room.IsMatching);
+                Assert.Null(room.Host);
+                break;
+            case "hr":
+                Assert.NotEmpty(rotation.Queue);
+                Assert.False(room.IsMatching);
+                Assert.True(rotation.NeedsRotate, "expected the host to rotate after the next match");
+                Assert.NotNull(room.Host);
+                break;
+            case "hn":
+                Assert.NotEmpty(rotation.Queue);
+                Assert.False(room.IsMatching);
+                Assert.False(rotation.NeedsRotate, "expected the host to keep the turn");
+                Assert.NotNull(room.Host);
+                break;
+            case "m":
+                Assert.NotEmpty(rotation.Queue);
+                Assert.True(room.IsMatching);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(state), state, null);
+        }
+    }
+
+    private IEnumerable<LobbyEvent> Answer(LobbyCommand command)
+    {
+        switch (command)
+        {
+            case TransferHost c when _players.Contains(c.Username):
+                _host = c.Username;
+                yield return new HostChanged(c.Username);
+                break;
+            case TransferHost:
+                yield return new UserNotFound();
+                break;
+            case ClearHost:
+                _host = null;
+                yield return new HostCleared();
+                break;
+            case Domain.AbortMatch:
+                yield return _matching ? new MatchAborted() : new MatchNotInProgress();
+                _matching = false;
+                break;
+            case RequestStat c when Stats.TryGetValue(c.Username, out var activity):
+                yield return new PlayerStatReceived(new PlayerStat(c.Username, 1, activity, 0, 0, 0, 0, 0), c.ViaPrivateMessage);
+                break;
+            case KickPlayer c when _players.Remove(c.Username):
+                if (_host == c.Username)
+                {
+                    _host = null;
+                }
+
+                yield return new PlayerLeft(c.Username);
+                yield return new PlayerKicked(c.Username);
+                break;
+            case LookUpBeatmap c when AnswerLookupsAtOnce:
+                yield return new BeatmapLookedUp(c.BeatmapId, Lookup(c.BeatmapId));
+                break;
+            case LookUpBeatmap c:
+                PendingLookups.Add(c);
+                break;
+            case SetBeatmap c:
+                yield return new BeatmapChanged(c.BeatmapId, $"title {c.BeatmapId}", true);
+                break;
+            case AbortCountdown:
+                yield return new CountdownAborted();
+                break;
+            case Domain.StartMatch:
+                _matching = true;
+                yield return new MatchStarted();
+                break;
+            case RequestRoomState:
+                yield return new RoomStateReceived(new RoomState(RoomName, 1, 100, "map", TeamModeText, WinCondition, ActiveMods,
+                    [.. _players.Select((name, i) => new RoomPlayer(Slots.GetValueOrDefault(name, i + 1), "Not Ready", i + 1, name, name == _host, Team.None, string.Empty))]));
+                break;
+            case SetTeamAndScoreMode c:
+                TeamModeText = ((TeamMode)c.TeamMode).ToString();
+                WinCondition = ((ScoreMode)c.ScoreMode).ToString();
+                Size = c.Size ?? Size;
+                break;
+            case SetSize c:
+                Size = c.Size;
+                break;
+            case SetMods c:
+                ActiveMods = RoomModes.ParseMods(c.Mods).ToNames();
+                break;
+            case SetRoomName c:
+                RoomName = c.Name;
+                break;
+            case SetPassword c:
+                Password = c.Password;
+                break;
+        }
+    }
+}
+
+internal static class RoomStates
+{
+    private static RoomState State(params (int Slot, string Name, bool Host)[] players) =>
+        new("5* host rotate", 53084403, 853167, "Silent Siren - Hachigatsu no Yoru [August]", "HeadToHead", "Score", "Freemod",
+            [.. players.Select(p => new RoomPlayer(p.Slot, "Not Ready", p.Slot * 111, p.Name, p.Host, Team.None, p.Host ? "Host" : string.Empty))]);
+
+    // The same rooms as osu-ahr's MpSettingsCases.
+    public static RoomState Case1_1 => State((1, "p1", true), (2, "p2", false), (3, "p3", false), (4, "p4", false), (5, "p5", false));
+    public static RoomState Case1_2 => State((1, "p1", false), (2, "p2", false), (3, "p3", true), (4, "p4", false), (5, "p5", false));
+    public static RoomState Case1_3 => State((1, "p6", false), (2, "p2", false), (4, "p4", true), (5, "p5", false), (6, "p7", false));
+}

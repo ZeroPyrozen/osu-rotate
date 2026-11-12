@@ -1,0 +1,13 @@
+@page "/history"
+@using OsuRotate.Web.Components.History
+@attribute [Authorize(Policy = OsuRotate.Web.Auth.OwnerAuthentication.OwnerPolicy)]
+
+<PageTitle>History - osu-rotate</PageTitle>
+
+<nav class="site"><a href="">Lobby</a> | <a href="history" aria-current="page">History</a></nav>
+
+<h1>History</h1>
+
+<MatchStatsPanel />
+
+<MatchList />

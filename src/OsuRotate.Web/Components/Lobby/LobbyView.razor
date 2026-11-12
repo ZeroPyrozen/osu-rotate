@@ -1,0 +1,142 @@
+@using System.Globalization
+@using OsuRotate.Application
+@using OsuRotate.Domain
+
+@* Renders one snapshot. Everything from players and Bancho is shown as text, never as markup. *@
+
+<section class="lobby-status" aria-label="Lobby status">
+    <p>Lobby status: <strong>@Status</strong></p>
+    <p class="connection">Bancho: <strong>@(Snapshot?.Connected == true ? "connected" : "not connected")</strong></p>
+
+    @if (Snapshot is null)
+    {
+        <p>The bot is starting.</p>
+    }
+    else
+    {
+        @if (Snapshot.RoomId is { } roomId)
+        {
+            <p class="room">
+                Room: <a href="@RoomUrl(roomId)" target="_blank" rel="noopener noreferrer">@(Snapshot.Title ?? "untitled") (#@roomId)</a>
+            </p>
+        }
+        else
+        {
+            <p class="room">No room open.</p>
+        }
+
+        @if (Snapshot.ClosingWhenEmpty)
+        {
+            <p class="closing">Closing once everyone has left.</p>
+        }
+
+        <p class="match">
+            @(Snapshot.IsMatching ? "A match is being played." : Snapshot.CountdownRunning ? "The match start countdown is running." : "Waiting for the host.")
+            @if (Snapshot.BeatmapId > 0)
+            {
+                <span> Map: <a href="@MapUrl(Snapshot.BeatmapId)" target="_blank" rel="noopener noreferrer">#@Snapshot.BeatmapId</a></span>
+            }
+        </p>
+    }
+</section>
+
+@if (Snapshot is not null)
+{
+    <section class="lobby-queue" aria-label="Host queue">
+        <h2>Queue</h2>
+        @if (Snapshot.Queue.Count == 0)
+        {
+            <p>Nobody is queued.</p>
+        }
+        else
+        {
+            <ol>
+                @foreach (var name in Snapshot.Queue)
+                {
+                    <li class="@(name == Snapshot.Host ? "host" : null)">
+                        @name
+                        @if (name == Snapshot.Host)
+                        {
+                            <span class="tag"> (host)</span>
+                        }
+                    </li>
+                }
+            </ol>
+        }
+    </section>
+
+    <section class="lobby-players" aria-label="Players">
+        <h2>Players (@Snapshot.Players.Count/16)</h2>
+        @if (Snapshot.Players.Count == 0)
+        {
+            <p>The room is empty.</p>
+        }
+        else
+        {
+            <table>
+                <thead>
+                    <tr><th>Slot</th><th>Player</th><th>Team</th><th>State</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var player in Snapshot.Players)
+                    {
+                        <tr>
+                            <td>@player.Slot</td>
+                            <td>
+                                @if (player.OsuUserId is { } id)
+                                {
+                                    <a href="@UserUrl(id)" target="_blank" rel="noopener noreferrer">@player.Name</a>
+                                }
+                                else
+                                {
+                                    @player.Name
+                                }
+                                @if (player.Name == Snapshot.Host)
+                                {
+                                    <span class="tag"> (host)</span>
+                                }
+                                @if (Snapshot.Referees.Contains(PlayerKey(player.Name)))
+                                {
+                                    <span class="tag"> (referee)</span>
+                                }
+                            </td>
+                            <td>@(player.Team == Team.None ? "-" : player.Team.ToString())</td>
+                            <td>@StateText(player.Status)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </section>
+
+    @if (Snapshot.Referees.Count > 0)
+    {
+        <section class="lobby-referees" aria-label="Referees">
+            <h2>Referees</h2>
+            <p>@string.Join(", ", Snapshot.Referees)</p>
+        </section>
+    }
+}
+
+@code {
+    [Parameter]
+    public LobbySnapshot? Snapshot { get; set; }
+
+    private string Status => Snapshot?.Status.ToString() ?? LobbyStatus.Idle.ToString();
+
+    private static string RoomUrl(long roomId) => string.Create(CultureInfo.InvariantCulture, $"https://osu.ppy.sh/mp/{roomId}");
+
+    private static string MapUrl(int beatmapId) => string.Create(CultureInfo.InvariantCulture, $"https://osu.ppy.sh/b/{beatmapId}");
+
+    private static string UserUrl(int userId) => string.Create(CultureInfo.InvariantCulture, $"https://osu.ppy.sh/users/{userId}");
+
+    private static string PlayerKey(string name) => Player.KeyOf(name);
+
+    private static string StateText(MatchStatus status) => status switch
+    {
+        MatchStatus.Playing => "playing",
+        MatchStatus.Finished => "finished",
+        MatchStatus.InLobby => "in lobby",
+        _ => "-",
+    };
+}

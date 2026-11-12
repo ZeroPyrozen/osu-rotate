@@ -1,0 +1,111 @@
+@using System.Globalization
+@using OsuRotate.Application
+@inject IMatchArchiveReader Archive
+@inject TimeProvider Time
+
+@* UC9: most played maps, most active players and matches per day, over a chosen window. Days are
+   counted in the server's time zone, as the chat times are. *@
+
+<section class="match-stats" aria-label="Stats">
+    <h2>Stats</h2>
+    <label>
+        Over the last
+        <select value="@_days" @onchange="ChangeWindowAsync">
+            @foreach (var days in Windows)
+            {
+                <option value="@days">@days days</option>
+            }
+        </select>
+    </label>
+
+    @if (_failed)
+    {
+        <p class="message" role="status">The stats could not be read. Try again in a moment.</p>
+    }
+    else if (_stats is null)
+    {
+        <p>Loading…</p>
+    }
+    else if (_stats.Matches == 0)
+    {
+        <p>No matches in this time.</p>
+    }
+    else
+    {
+        <p class="total">@_stats.Matches @(_stats.Matches == 1 ? "match" : "matches")</p>
+
+        <h3>Most played maps</h3>
+        <ol class="maps">
+            @foreach (var map in _stats.Maps)
+            {
+                <li><a href="@MatchList.MapLink(map.BeatmapId)" target="_blank" rel="noopener noreferrer">@map.BeatmapId</a>: @Count(map.Plays, "play")</li>
+            }
+        </ol>
+
+        <h3>Most active players</h3>
+        <ol class="players">
+            @foreach (var player in _stats.Players)
+            {
+                <li>@player.Name: @Count(player.Matches, "match")</li>
+            }
+        </ol>
+
+        <h3>Matches per day</h3>
+        <table class="per-day">
+            <tbody>
+                @foreach (var day in _stats.PerDay)
+                {
+                    <tr>
+                        <td>@day.Day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)</td>
+                        <td>@day.Matches</td>
+                        <td><meter min="0" max="@_busiest" value="@day.Matches"></meter></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
+@code {
+    public static readonly int[] Windows = [7, 30, 90, 365];
+
+    private int _days = 30;
+    private MatchStats? _stats;
+    private int _busiest = 1;
+    private bool _failed;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private Task ChangeWindowAsync(ChangeEventArgs args)
+    {
+        if (int.TryParse(args.Value?.ToString(), NumberStyles.None, CultureInfo.InvariantCulture, out var days) && Windows.Contains(days))
+        {
+            _days = days;
+        }
+
+        return LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var now = Time.GetUtcNow();
+        var offset = TimeZoneInfo.Local.GetUtcOffset(now);
+        try
+        {
+            _stats = await Archive.StatsAsync(new MatchStatsQuery(now.AddDays(-_days), offset), CancellationToken.None);
+
+            // The busiest day fills the bar. A meter, not a styled span: the CSP allows no style attributes.
+            _busiest = _stats.PerDay.Count == 0 ? 1 : _stats.PerDay.Max(d => d.Matches);
+            _failed = false;
+        }
+#pragma warning disable CA1031 // A database error shows a message instead of breaking the page.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            _failed = true;
+        }
+    }
+
+    private static string Count(int count, string noun) =>
+        string.Create(CultureInfo.InvariantCulture, $"{count} {noun}{(count == 1 ? string.Empty : noun.EndsWith('h') ? "es" : "s")}");
+}

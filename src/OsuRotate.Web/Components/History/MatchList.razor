@@ -1,0 +1,114 @@
+@using System.Globalization
+@using OsuRotate.Application
+@using OsuRotate.Domain
+@inject IMatchArchiveReader Archive
+
+@* UC9: recent matches, newest first, a page at a time. Names are shown as text, never as markup. *@
+
+<section class="match-list" aria-label="Recent matches">
+    <h2>Recent matches</h2>
+    @if (_failed)
+    {
+        <p class="message" role="status">The match history could not be read. Try again in a moment.</p>
+    }
+    else if (_page is null)
+    {
+        <p>Loading…</p>
+    }
+    else if (_page.Matches.Count == 0)
+    {
+        <p>No matches yet.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr><th>Started</th><th>Map</th><th>Host</th><th>Outcome</th><th>Scores</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var archived in _page.Matches)
+                {
+                    var match = archived.Match;
+                    <tr>
+                        <td><time datetime="@match.StartedAt.ToString("O", CultureInfo.InvariantCulture)">@match.StartedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)</time></td>
+                        <td><a href="@MapLink(match.BeatmapId)" target="_blank" rel="noopener noreferrer">@match.BeatmapId</a></td>
+                        <td>@(match.HostName ?? "-")</td>
+                        <td>@match.Outcome</td>
+                        <td>
+                            @if (match.Scores.Count == 0)
+                            {
+                                <span>-</span>
+                            }
+                            else
+                            {
+                                <details>
+                                    <summary>@match.Scores.Count @(match.Scores.Count == 1 ? "score" : "scores")</summary>
+                                    <ol class="scores">
+                                        @foreach (var score in match.Scores.OrderByDescending(s => s.Score))
+                                        {
+                                            <li>@score.Username: @score.Score.ToString("N0", CultureInfo.InvariantCulture)@(score.Passed ? null : " (failed)")</li>
+                                        }
+                                    </ol>
+                                </details>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    <nav class="pages" aria-label="Match pages">
+        @if (_pager?.HasNewer == true)
+        {
+            <button type="button" class="newest" disabled="@_busy" @onclick="NewestAsync">Newest</button>
+            <button type="button" class="newer" disabled="@_busy" @onclick="NewerAsync">Newer</button>
+        }
+        @if (_pager?.HasOlder == true)
+        {
+            <button type="button" class="older" disabled="@_busy" @onclick="OlderAsync">Older</button>
+        }
+    </nav>
+</section>
+
+@code {
+    public const int PageSize = 25;
+
+    private MatchPager? _pager;
+    private bool _busy;
+    private bool _failed;
+
+    private MatchPage? _page => _pager?.Page;
+
+    private MatchPager Pager => _pager ??= new MatchPager(Archive, PageSize);
+
+    public static string MapLink(int beatmapId) => string.Create(CultureInfo.InvariantCulture, $"https://osu.ppy.sh/b/{beatmapId}");
+
+    protected override Task OnInitializedAsync() => RunAsync(Pager.NewestAsync);
+
+    private Task OlderAsync() => RunAsync(Pager.OlderAsync);
+
+    private Task NewerAsync() => RunAsync(Pager.NewerAsync);
+
+    private Task NewestAsync() => RunAsync(Pager.NewestAsync);
+
+    private async Task RunAsync(Func<CancellationToken, Task> load)
+    {
+        _busy = true;
+        try
+        {
+            await load(CancellationToken.None);
+            _failed = false;
+        }
+#pragma warning disable CA1031 // A database error shows a message instead of breaking the page.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            _failed = true;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}
