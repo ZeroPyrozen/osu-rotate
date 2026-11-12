@@ -439,6 +439,30 @@ public sealed class LobbyActorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Nothing_is_saved_until_the_saved_queue_has_been_restored()
+    {
+        var engine = new LobbyEngine(new LobbySettings { OwnerName = "creator", HostAfkCheckInterval = TimeSpan.Zero }, _time);
+        engine.RestoreOnNextRoomState(["p2", "p1"], "p1", runningMatch: null);
+        _actor = new LobbyActor(engine, _transport, _catalog, _time, _diagnostics, new LobbyLifecycle(1, "room"), _store, _archive);
+        _run = _actor.RunAsync(_stop.Token);
+
+        _transport.Emit(new TransportConnected());
+        _transport.Emit(new RoomJoined(1));
+        _transport.Emit(new PlayerJoined("p3", 3, Team.None));
+        _transport.Emit(new ChatReceived("p3", "hi", false));
+        await _transport.WaitForAsync(sent => sent.Any(c => c is RequestRoomState));
+        await _actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Empty(_store.Saves);
+
+        _transport.Emit(new RoomStateReceived(new RoomState("room", 1, 0, string.Empty, "HeadToHead", "Score", string.Empty,
+            [new RoomPlayer(1, "Not Ready", 11, "p1", true, Team.None, "Host"), new RoomPlayer(2, "Not Ready", 22, "p2", false, Team.None, string.Empty),
+             new RoomPlayer(3, "Not Ready", 33, "p3", false, Team.None, string.Empty)])));
+        await WaitUntilAsync(() => _store.Last?.Session?.Queue.Count == 3);
+        Assert.Equal(["p2", "p1", "p3"], _store.Last!.Session!.Queue);
+        await _actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
     public async Task Stopping_ends_the_run()
     {
         Start();

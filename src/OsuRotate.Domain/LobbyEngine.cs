@@ -271,6 +271,7 @@ public sealed partial class LobbyEngine
                 break;
 
             case MatchFinished:
+                RecoveryOnMatchEnded();
                 Room.EndMatch();
                 HistoryOnMatchEnded(MatchOutcome.Finished);
                 StopStuckMatchCheck();
@@ -288,6 +289,7 @@ public sealed partial class LobbyEngine
             // the bot thought a match was running. osu-ahr counted it either way.
             case MatchAborted:
             case MatchNotInProgress when Room.IsMatching:
+                RecoveryOnMatchEnded();
                 Rotation.OnMatchAborted(Room.EndMatch());
                 HistoryOnMatchEnded(MatchOutcome.Aborted);
                 StopStuckMatchCheck();
@@ -381,7 +383,7 @@ public sealed partial class LobbyEngine
             VotesOnPlayerJoined(player);
         }
 
-        if (changes.Any)
+        if (!TryRestore(state) && changes.Any)
         {
             Rotation.OnRoomStateApplied(state, changes);
         }

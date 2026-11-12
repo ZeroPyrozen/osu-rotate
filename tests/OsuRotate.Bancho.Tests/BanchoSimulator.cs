@@ -110,6 +110,25 @@ internal sealed class BanchoSimulator : IAsyncDisposable
         }
     }
 
+    // Ends the connection after everything sent has gone out. A plain close with unread input can
+    // reset the connection on Windows and lose those last lines, which real Bancho does not do.
+    private void CloseGracefully()
+    {
+        lock (_gate)
+        {
+            try
+            {
+                _client?.Client.Shutdown(SocketShutdown.Send);
+            }
+            catch (Exception exception) when (exception is SocketException or ObjectDisposedException)
+            {
+                // Already gone.
+            }
+
+            _writer = null;
+        }
+    }
+
     public void DropClient()
     {
         lock (_gate)
@@ -214,7 +233,7 @@ internal sealed class BanchoSimulator : IAsyncDisposable
             Send($"{Server} 372 {Nick} :- Please click the following link to receive your password:");
             Send($"{Server} 372 {Nick} :- https://osu.ppy.sh/home/account/edit#legacy-api");
             Send($"{Server} 372 {Nick} :-");
-            DropClient();
+            CloseGracefully();
             return;
         }
 
@@ -267,8 +286,18 @@ internal sealed class BanchoSimulator : IAsyncDisposable
         }
         else if (text.StartsWith("!mp host ", StringComparison.Ordinal))
         {
-            FromBot(target, $"{text[9..]} became the host.");
-            FromBot(target, $"Changed match host to {text[9..]}");
+            // "#22" names a player by osu! user id, as the bot does once it knows the ids.
+            var name = text[9..];
+            if (name.StartsWith('#') && int.TryParse(name.AsSpan(1), out var id))
+            {
+                lock (_gate)
+                {
+                    name = _players.FirstOrDefault(p => p.Id == id).Name ?? name;
+                }
+            }
+
+            FromBot(target, $"{name} became the host.");
+            FromBot(target, $"Changed match host to {name}");
         }
         else if (text == "!mp listrefs")
         {

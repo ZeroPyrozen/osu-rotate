@@ -262,7 +262,9 @@ public sealed class LobbyActor
     // If power fails between saving and sending, recovery reads the saved state and sends again.
     private async Task SaveAsync(CancellationToken cancellationToken)
     {
-        if (_store is null)
+        // Until the saved queue is restored, the engine's queue is partial; saving it would lose the
+        // saved one if the bot went down again before the room state arrived.
+        if (_store is null || _engine.IsRestorePending)
         {
             return;
         }

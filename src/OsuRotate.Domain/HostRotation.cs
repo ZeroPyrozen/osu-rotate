@@ -187,6 +187,23 @@ public sealed class HostRotation(Room room, DenyList denyList, Action<LobbyComma
         return true;
     }
 
+    // After a restart: the saved order for players still here, then anyone new in slot order. The host
+    // only moves when asked; during a match it moves when the match finishes.
+    public void Restore(IReadOnlyList<Player> order, RoomState state, bool changeHost)
+    {
+        var queue = order.Where(p => room.Contains(p) && !denyList.Contains(p)).Distinct().ToList();
+        queue.AddRange(state.Players
+            .OrderBy(p => p.Slot)
+            .Select(p => room.GetOrAdd(p.Username))
+            .Where(p => room.Contains(p) && !denyList.Contains(p) && !queue.Contains(p)));
+        Replace(queue);
+        NeedsRotate = true;
+        if (changeHost)
+        {
+            ChangeHost();
+        }
+    }
+
     // Listed players go first in the given order, everyone else keeps their relative order.
     public bool Reorder(IReadOnlyList<Player> order)
     {
