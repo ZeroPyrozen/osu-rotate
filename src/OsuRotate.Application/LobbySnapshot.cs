@@ -15,6 +15,7 @@ public sealed record LobbySnapshot(
     string? Host,
     IReadOnlyList<string> Queue,
     bool IsMatching,
+    bool CountdownRunning,
     int BeatmapId,
     IReadOnlyList<string> Denied,
     IReadOnlyList<string> Referees,
@@ -32,6 +33,7 @@ public sealed record LobbySnapshot(
         && Host == other.Host
         && Queue.SequenceEqual(other.Queue)
         && IsMatching == other.IsMatching
+        && CountdownRunning == other.CountdownRunning
         && BeatmapId == other.BeatmapId
         && Denied.SequenceEqual(other.Denied)
         && Referees.SequenceEqual(other.Referees)
@@ -52,6 +54,7 @@ public sealed record LobbySnapshot(
             room.Host?.Name,
             [.. engine.Rotation.Queue.Select(p => p.Name)],
             room.IsMatching,
+            engine.IsStartTimerRunning,
             room.BeatmapId,
             [.. engine.DenyList.Keys.Order(StringComparer.Ordinal)],
             [.. room.Referees.Order(StringComparer.Ordinal)],

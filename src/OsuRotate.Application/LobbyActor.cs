@@ -190,6 +190,12 @@ public sealed class LobbyActor
                 return _engine.Deny(e.Name);
             case AllowPlayer e:
                 return _engine.Allow(e.Name);
+            case ForceStart e:
+                return _engine.ForceStart(e.CountdownSeconds);
+            case ForceAbort:
+                return _engine.ForceAbort();
+            case CancelCountdown:
+                return _engine.CancelCountdown();
             case ChangeSettings e:
                 _engine.UpdateSettings(e.Settings);
                 return [];

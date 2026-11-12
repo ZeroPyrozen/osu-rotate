@@ -1,0 +1,90 @@
+@using OsuRotate.Application
+@using OsuRotate.Domain
+@using OsuRotate.Web.Bot
+@inject LobbyRuntime Runtime
+
+@if (Snapshot is { Status: LobbyStatus.Open })
+{
+    <section class="lobby-host-controls" aria-label="Host controls">
+        <h2>Host controls</h2>
+
+        <div class="match-controls">
+            @if (QueueActions.CanStart(Snapshot))
+            {
+                <form class="start" @onsubmit="StartAsync">
+                    <label>Countdown (seconds) <input @bind="_countdown" inputmode="numeric" placeholder="0" size="4" /></label>
+                    <button type="submit" disabled="@_busy">Start match</button>
+                </form>
+            }
+
+            @if (QueueActions.CanCancelCountdown(Snapshot))
+            {
+                <button class="cancel-countdown" disabled="@_busy" @onclick="() => RunAsync(() => Actions.CancelCountdownAsync())">Stop the countdown</button>
+            }
+
+            @if (QueueActions.CanAbort(Snapshot))
+            {
+                <button class="abort" disabled="@_busy" @onclick="() => RunAsync(() => Actions.AbortAsync())">Abort the match</button>
+            }
+
+            @if (QueueActions.CanSkip(Snapshot))
+            {
+                <button class="skip" disabled="@_busy" @onclick="() => RunAsync(() => Actions.SkipHostAsync())">Skip the host</button>
+            }
+        </div>
+
+        @if (QueueActions.CanReorder(Snapshot))
+        {
+            <ol class="queue-editor">
+                @for (var i = 0; i < Snapshot.Queue.Count; i++)
+                {
+                    var name = Snapshot.Queue[i];
+                    var first = i == 0;
+                    var last = i == Snapshot.Queue.Count - 1;
+                    <li>
+                        <span class="name">@name</span>
+                        <button class="up" disabled="@(_busy || first)" aria-label="@($"Move {name} up")" @onclick="() => RunAsync(() => Actions.MoveAsync(name, -1))">Up</button>
+                        <button class="down" disabled="@(_busy || last)" aria-label="@($"Move {name} down")" @onclick="() => RunAsync(() => Actions.MoveAsync(name, 1))">Down</button>
+                        @if (name != Snapshot.Host)
+                        {
+                            <button class="give-host" disabled="@_busy" @onclick="() => RunAsync(() => Actions.GiveHostAsync(name))">Give host</button>
+                        }
+                    </li>
+                }
+            </ol>
+        }
+
+        @if (_message is not null)
+        {
+            <p class="message" role="status">@_message</p>
+        }
+    </section>
+}
+
+@code {
+    private QueueActions? _actions;
+    private string? _countdown;
+    private string? _message;
+    private bool _busy;
+
+    [Parameter]
+    public LobbySnapshot? Snapshot { get; set; }
+
+    private QueueActions Actions => _actions ??= new QueueActions(Runtime);
+
+    private Task StartAsync() => RunAsync(() => Actions.StartAsync(_countdown));
+
+    private async Task RunAsync(Func<Task<string?>> action)
+    {
+        _busy = true;
+        _message = null;
+        try
+        {
+            _message = await action();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

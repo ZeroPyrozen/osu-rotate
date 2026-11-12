@@ -61,10 +61,11 @@ public sealed class LobbyViewTests : IAsyncDisposable
         IReadOnlyList<string>? queue = null,
         bool matching = false,
         int beatmapId = 0,
-        IReadOnlyList<string>? referees = null) =>
+        IReadOnlyList<string>? referees = null,
+        bool countdown = false) =>
         new(status, connected, roomId, title, closing,
             players ?? [new("p1", 11, 1, Team.None, MatchStatus.InLobby), new("p 2", null, 2, Team.Blue, MatchStatus.Playing)],
-            host, queue ?? ["p1", "p 2"], matching, beatmapId, [], referees ?? [], new LobbySettings { OwnerName = "creator" });
+            host, queue ?? ["p1", "p 2"], matching, countdown, beatmapId, [], referees ?? [], new LobbySettings { OwnerName = "creator" });
 
     [Fact]
     public async Task Shows_the_room_queue_players_and_host()

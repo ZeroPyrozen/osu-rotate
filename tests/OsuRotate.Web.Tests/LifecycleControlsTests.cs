@@ -13,7 +13,7 @@ namespace OsuRotate.Web.Tests;
 public class LifecycleControlsTests
 {
     private static LobbySnapshot Snapshot(LobbyStatus status, long? roomId = null, bool closing = false, string? keptTitle = null) =>
-        new(status, true, roomId, "room", closing, [], null, [], false, 0, [], [],
+        new(status, true, roomId, "room", closing, [], null, [], false, false, 0, [], [],
             new LobbySettings { OwnerName = "creator", Keeping = new RoomKeeping { Title = keptTitle } });
 
     public class Rules

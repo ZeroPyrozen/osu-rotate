@@ -31,7 +31,7 @@
         }
 
         <p class="match">
-            @(Snapshot.IsMatching ? "A match is being played." : "Waiting for the host.")
+            @(Snapshot.IsMatching ? "A match is being played." : Snapshot.CountdownRunning ? "The match start countdown is running." : "Waiting for the host.")
             @if (Snapshot.BeatmapId > 0)
             {
                 <span> Map: <a href="@MapUrl(Snapshot.BeatmapId)" target="_blank" rel="noopener noreferrer">#@Snapshot.BeatmapId</a></span>

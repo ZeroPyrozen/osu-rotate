@@ -21,6 +21,13 @@ public sealed record AllowPlayer(string Name) : LobbyInput;
 
 public sealed record ChangeSettings(LobbySettings Settings) : LobbyInput;
 
+// Starting and aborting regardless of votes, as *start and *abort do. Zero seconds starts at once.
+public sealed record ForceStart(int CountdownSeconds) : LobbyInput;
+
+public sealed record ForceAbort : LobbyInput;
+
+public sealed record CancelCountdown : LobbyInput;
+
 // Lifecycle: make a new room, take over an existing one, close it now or once everyone has left.
 public sealed record CreateLobby(string Title) : LobbyInput;
 
