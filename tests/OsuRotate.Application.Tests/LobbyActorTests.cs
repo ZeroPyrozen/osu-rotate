@@ -12,6 +12,7 @@ public sealed class LobbyActorTests : IAsyncDisposable
     private readonly RecordingDiagnostics _diagnostics = new();
     private readonly RecordingStore _store;
     private readonly RecordingArchive _archive = new();
+    private readonly ScriptedHistory _history = new();
     private readonly CancellationTokenSource _stop = new();
     private LobbyActor? _actor;
 
@@ -22,7 +23,7 @@ public sealed class LobbyActorTests : IAsyncDisposable
     {
         var settings = new LobbySettings { OwnerName = "creator", HostAfkCheckInterval = TimeSpan.Zero };
         var engine = new LobbyEngine(configure?.Invoke(settings) ?? settings, _time);
-        _actor = new LobbyActor(engine, _transport, _catalog, _time, _diagnostics, store: _store, archive: _archive);
+        _actor = new LobbyActor(engine, _transport, _catalog, _time, _diagnostics, store: _store, archive: _archive, history: _history);
         _run = _actor.RunAsync(_stop.Token);
         return _actor;
     }
@@ -460,6 +461,52 @@ public sealed class LobbyActorTests : IAsyncDisposable
         await WaitUntilAsync(() => _store.Last?.Session?.Queue.Count == 3);
         Assert.Equal(["p2", "p1", "p3"], _store.Last!.Session!.Queue);
         await _actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task The_match_history_is_read_for_the_room_and_kicks_come_back_to_the_engine()
+    {
+        var actor = await StartWithPlayersAsync(s => s with { HostKickTolerance = 1 });
+        await WaitUntilAsync(() => _history.Asked.Contains((1, null)));
+
+        // A kick by the host after the bot joined: the counterattack kicks p1.
+        _history.Latest = 101;
+        _history.Kicks.Add((33, "p3", _time.GetUtcNow()));
+        _time.Advance(TimeSpan.FromSeconds(60));
+        await _transport.WaitForAsync(sent => sent.Contains(new KickPlayer("p1")));
+        Assert.Contains((1L, (long?)100), _history.Asked);
+        Assert.DoesNotContain(_transport.Sent, c => c is ReadMatchHistory);
+        await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task Players_who_left_on_their_own_are_not_counted_as_kicked()
+    {
+        var actor = await StartWithPlayersAsync(s => s with { HostKickTolerance = 1 });
+        await WaitUntilAsync(() => _history.Asked.Contains((1, null)));
+
+        _history.Latest = 101;
+        _history.Leaves.Add((33, "p3", _time.GetUtcNow()));
+        _time.Advance(TimeSpan.FromSeconds(60));
+        await WaitUntilAsync(() => _history.Asked.Contains((1, 100)));
+        await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.DoesNotContain(_transport.Sent, c => c is KickPlayer);
+    }
+
+    [Fact]
+    public async Task A_failing_history_is_ignored_and_read_again_later()
+    {
+        _history.Throw = true;
+        var actor = await StartWithPlayersAsync(s => s with { HostKickTolerance = 1 });
+        await WaitUntilAsync(() => _history.Asked.Count == 1);
+
+        _history.Throw = false;
+        _time.Advance(TimeSpan.FromSeconds(60));
+        await WaitUntilAsync(() => _history.Asked.Count == 2);
+        Assert.Equal((1L, (long?)null), _history.Asked.Last());
+        await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
     }
 
     [Fact]

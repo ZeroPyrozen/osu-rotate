@@ -128,6 +128,37 @@ internal sealed class RecordingArchive : IMatchArchive
         ValueTask.FromResult<IReadOnlyList<ArchivedMatch>>([]);
 }
 
+// Serves a scripted match history: the kicks to show and where the history ends.
+internal sealed class ScriptedHistory : IMatchHistory
+{
+    public ConcurrentQueue<(long RoomId, long? After)> Asked { get; } = new();
+
+    public long Latest { get; set; } = 100;
+
+    public List<(int UserId, string Username, DateTimeOffset At)> Kicks { get; } = [];
+
+    public List<(int UserId, string Username, DateTimeOffset At)> Leaves { get; } = [];
+
+    public bool Throw { get; set; }
+
+    public ValueTask<MatchLookup> GetAsync(long matchId, long? afterEventId, CancellationToken cancellationToken)
+    {
+        Asked.Enqueue((matchId, afterEventId));
+        if (Throw)
+        {
+            throw new HttpRequestException("api down");
+        }
+
+        var events = Kicks.Select((k, i) => new MatchEvent(i + 1, "player-kicked", k.At, k.UserId, null))
+            .Concat(Leaves.Select((l, i) => new MatchEvent(50 + i, "player-left", l.At, l.UserId, null)))
+            .ToList();
+        var users = Kicks.Select(k => (k.UserId, k.Username)).Concat(Leaves.Select(l => (l.UserId, l.Username)))
+            .DistinctBy(u => u.UserId)
+            .ToDictionary(u => u.UserId, u => u.Username);
+        return ValueTask.FromResult(MatchLookup.Found(new MatchHistory(matchId, "room", DateTimeOffset.UnixEpoch, null, null, Latest, events, users)));
+    }
+}
+
 internal sealed class RecordingDiagnostics : ILobbyDiagnostics
 {
     public ConcurrentQueue<string> Reports { get; } = new();

@@ -91,6 +91,7 @@ public class BanchoCommandFormatterTests
     public void Application_commands_are_never_formatted_for_bancho()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => BanchoCommandFormatter.Format(new LookUpBeatmap(1, GameMode.Osu, true), Channel));
+        Assert.Throws<ArgumentOutOfRangeException>(() => BanchoCommandFormatter.Format(new ReadMatchHistory(5), Channel));
         Assert.Throws<ArgumentOutOfRangeException>(() => BanchoCommandFormatter.Format(
             new RecordMatch(new MatchRecord(1, null, null, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, MatchOutcome.Finished, [])), Channel));
     }

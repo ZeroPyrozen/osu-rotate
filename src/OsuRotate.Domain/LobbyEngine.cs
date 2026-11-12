@@ -59,6 +59,11 @@ public sealed record LobbySettings
     // Says the info message this often. Only intervals over 3 minutes count; zero turns it off.
     public TimeSpan InfoAnnouncementInterval { get; init; } = TimeSpan.Zero;
 
+    // The host-kick counterattack: kick a host who kicks this many players in one turn. Zero turns it
+    // off. The match history is read when a match starts and this often between matches.
+    public int HostKickTolerance { get; init; } = 4;
+    public TimeSpan HostKickCheckInterval { get; init; } = TimeSpan.FromSeconds(60);
+
     // The running build, filled in by the host.
     public string BotVersion { get; init; } = "0.0.0";
 }
@@ -122,6 +127,7 @@ public sealed partial class LobbyEngine
             case RoomCreated or RoomJoined:
                 KeeperOnRoomEntered();
                 StartInfoAnnouncement();
+                HostKicksOnRoomEntered();
                 if (lobbyEvent is RoomJoined)
                 {
                     // A room joined after a restart may have referees the bot has not seen added.
@@ -192,6 +198,7 @@ public sealed partial class LobbyEngine
                 var host = Room.GetOrAdd(e.Username);
                 if (Room.TrySetHost(host))
                 {
+                    HostKicksOnHostChanged(host);
                     Rotation.OnHostChanged(host);
                     VotesOnHostChanged();
                     StartHostAfkCheck(first: true);
@@ -206,6 +213,15 @@ public sealed partial class LobbyEngine
 
             case HostCleared:
                 Room.ClearHost();
+                HostKicksOnHostChanged(null);
+                break;
+
+            case PlayerKicked e:
+                HostKicksOnRefereeKick(e.Username);
+                break;
+
+            case MatchHistoryRead e:
+                HostKicksOnHistoryRead(e);
                 break;
 
             case UserNotFound:
@@ -236,6 +252,7 @@ public sealed partial class LobbyEngine
             case MatchStarted:
                 Room.StartMatch();
                 HistoryOnMatchStarted();
+                HostKicksOnMatchStarted();
                 Rotation.OnMatchStarted();
                 VotesOnMatchStarted();
                 AfkOnMatchStarted();

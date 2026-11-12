@@ -83,6 +83,9 @@ public sealed record BeatmapChanging : LobbyEvent;
 public sealed record BeatmapChanged(int BeatmapId, string Title, bool ChangedByReferee) : LobbyEvent;
 public sealed record InvalidBeatmapId : LobbyEvent;
 
+// The application's answer to ReadMatchHistory: the kicks in it and where the history now ends.
+public sealed record MatchHistoryRead(IReadOnlyList<SeenKick> Kicks, long LatestEventId) : LobbyEvent;
+
 // The application's answer to LookUpBeatmap.
 public sealed record BeatmapLookedUp(int BeatmapId, BeatmapLookup Result) : LobbyEvent;
 public sealed record InvalidSettings : LobbyEvent;

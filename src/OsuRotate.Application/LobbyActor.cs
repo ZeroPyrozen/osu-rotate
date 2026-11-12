@@ -14,6 +14,7 @@ public sealed class LobbyActor
     private readonly LobbyLifecycle _lifecycle;
     private readonly ILobbyStore? _store;
     private readonly IMatchArchive? _archive;
+    private readonly IMatchHistory _history;
     private readonly List<(long? RoomId, MatchRecord Match)> _unsavedMatches = [];
     private SavedLobby _saved;
     private LobbyEngine _engine;
@@ -32,9 +33,11 @@ public sealed class LobbyActor
         ILobbyDiagnostics? diagnostics = null,
         LobbyLifecycle? lifecycle = null,
         ILobbyStore? store = null,
-        IMatchArchive? archive = null)
+        IMatchArchive? archive = null,
+        IMatchHistory? history = null)
     {
         _archive = archive;
+        _history = history ?? NoMatchHistory.Instance;
         _engine = engine;
         _lifecycle = lifecycle ?? new LobbyLifecycle();
         _store = store;
@@ -246,6 +249,16 @@ public sealed class LobbyActor
                 continue;
             }
 
+            if (command is ReadMatchHistory read)
+            {
+                if (_lifecycle.RoomId is { } roomId)
+                {
+                    _ = ReadHistoryAsync(roomId, read.AfterEventId, cancellationToken);
+                }
+
+                continue;
+            }
+
             if (command is LookUpBeatmap lookup)
             {
                 _ = LookUpAsync(lookup, cancellationToken);
@@ -360,6 +373,37 @@ public sealed class LobbyActor
         }
 
         _inbox.Writer.TryWrite(new Envelope(new BanchoEvent(new BeatmapLookedUp(lookup.BeatmapId, result)), null));
+    }
+
+    // Runs beside the loop like a lookup. No answer is fine: the engine asks again later.
+    private async Task ReadHistoryAsync(long roomId, long? afterEventId, CancellationToken cancellationToken)
+    {
+        MatchLookup lookup;
+        try
+        {
+            lookup = await _history.GetAsync(roomId, afterEventId, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+#pragma warning disable CA1031 // The history should not throw; if it does, the next read tries again.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            return;
+        }
+
+        if (lookup is not { Outcome: MatchLookupOutcome.Found, History: { } history })
+        {
+            return;
+        }
+
+        var kicks = history.Events
+            .Where(e => e.Type == "player-kicked" && history.UsernameOf(e.UserId) is not null)
+            .Select(e => new SeenKick(history.UsernameOf(e.UserId)!, e.Timestamp))
+            .ToList();
+        _inbox.Writer.TryWrite(new Envelope(new BanchoEvent(new MatchHistoryRead(kicks, history.LatestEventId)), null));
     }
 
     private void Publish()

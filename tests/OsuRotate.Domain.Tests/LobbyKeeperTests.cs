@@ -431,7 +431,7 @@ public class LobbyKeeperTests
     {
         private static LobbyHarness Create(RoomKeeping keeping, params string[] players)
         {
-            var lobby = new LobbyHarness(s => s with { Keeping = keeping, HostAfkCheckInterval = TimeSpan.Zero });
+            var lobby = new LobbyHarness(s => s with { Keeping = keeping, HostAfkCheckInterval = TimeSpan.Zero, HostKickTolerance = 0 });
             lobby.AddPlayers(players.Length == 0 ? ["p1", "p2", "p3"] : players);
             lobby.Sent.Clear();
             return lobby;

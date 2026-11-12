@@ -33,6 +33,10 @@ public sealed record InvitePlayer(string Username) : LobbyCommand;
 // back as BeatmapLookedUp. Never send it to the transport.
 public sealed record LookUpBeatmap(int BeatmapId, GameMode Mode, bool AllowConvert) : LobbyCommand;
 
+// Answered by the application from the osu! match API: the kicks after AfterEventId (all of the latest
+// page when null), fed back as MatchHistoryRead. Never send it to the transport.
+public sealed record ReadMatchHistory(long? AfterEventId) : LobbyCommand;
+
 // Also answered by the application: save the match to the history. Never send it to the transport.
 public sealed record RecordMatch(MatchRecord Match) : LobbyCommand;
 
