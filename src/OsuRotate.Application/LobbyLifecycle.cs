@@ -31,6 +31,9 @@ public sealed class LobbyLifecycle
     public string? Title { get; private set; }
     public bool ClosingWhenEmpty => _closeWhenEmpty;
 
+    // Whether Bancho's IRC connection is up, which Idle alone does not say.
+    public bool Connected => _connected;
+
     public LifecycleStep OnInput(LobbyInput input, LobbySettings settings) => input switch
     {
         CreateLobby e => Create(e.Title),

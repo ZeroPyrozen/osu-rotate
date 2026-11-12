@@ -9,6 +9,10 @@ public sealed class LobbyRuntime : ILobbyStatusReader
 {
     private LobbyActor? _actor;
 
+    // Raised with each new snapshot, and with null when the bot stops. Raised on the actor's loop:
+    // handlers must only hand the snapshot on (Blazor pages use InvokeAsync), never wait.
+    public event Action<LobbySnapshot?>? Changed;
+
     public LobbyActor? Actor => Volatile.Read(ref _actor);
 
     public LobbySnapshot? Snapshot => Actor?.Snapshot;
@@ -27,5 +31,24 @@ public sealed class LobbyRuntime : ILobbyStatusReader
         return true;
     }
 
-    internal void Attach(LobbyActor? actor) => Volatile.Write(ref _actor, actor);
+    internal void Attach(LobbyActor? actor)
+    {
+        if (Actor is { } previous)
+        {
+            previous.SnapshotChanged -= Raise;
+        }
+
+        Volatile.Write(ref _actor, actor);
+        if (actor is not null)
+        {
+            actor.SnapshotChanged += Raise;
+        }
+
+        Raise(actor?.Snapshot);
+    }
+
+    // For tests: pages must stop listening when they close.
+    internal int ListenerCount => Changed?.GetInvocationList().Length ?? 0;
+
+    private void Raise(LobbySnapshot? snapshot) => Changed?.Invoke(snapshot);
 }

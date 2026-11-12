@@ -1,13 +1,16 @@
 @page "/"
 @using OsuRotate.Application
+@using OsuRotate.Web.Bot
+@using OsuRotate.Web.Components.Lobby
 @attribute [Authorize(Policy = OsuRotate.Web.Auth.OwnerAuthentication.OwnerPolicy)]
-@inject ILobbyStatusReader LobbyStatus
+@implements IDisposable
+@inject LobbyRuntime Runtime
 
 <PageTitle>osu-rotate</PageTitle>
 
 <h1>osu-rotate</h1>
 
-<p>Lobby status: <strong>@LobbyStatus.Current</strong></p>
+<LobbyView Snapshot="_snapshot" />
 
 <AuthorizeView>
     <p>Signed in as <strong>@context.User.Identity?.Name</strong>.</p>
@@ -16,3 +19,24 @@
         <button type="submit">Sign out</button>
     </form>
 </AuthorizeView>
+
+@code {
+    private LobbySnapshot? _snapshot;
+
+    protected override void OnInitialized()
+    {
+        _snapshot = Runtime.Snapshot;
+        Runtime.Changed += OnChanged;
+    }
+
+    // Called on the actor's loop. InvokeAsync only queues the render on this page's circuit, so a
+    // slow browser never holds up the lobby.
+    private void OnChanged(LobbySnapshot? snapshot) =>
+        _ = InvokeAsync(() =>
+        {
+            _snapshot = snapshot;
+            StateHasChanged();
+        });
+
+    public void Dispose() => Runtime.Changed -= OnChanged;
+}

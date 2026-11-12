@@ -7,6 +7,7 @@ public sealed record PlayerSnapshot(string Name, int? OsuUserId, int Slot, Team 
 // What the dashboard sees. Immutable, so a slow page cannot hold up the actor.
 public sealed record LobbySnapshot(
     LobbyStatus Status,
+    bool Connected,
     long? RoomId,
     string? Title,
     bool ClosingWhenEmpty,
@@ -23,6 +24,7 @@ public sealed record LobbySnapshot(
     public bool Equals(LobbySnapshot? other) =>
         other is not null
         && Status == other.Status
+        && Connected == other.Connected
         && RoomId == other.RoomId
         && Title == other.Title
         && ClosingWhenEmpty == other.ClosingWhenEmpty
@@ -42,6 +44,7 @@ public sealed record LobbySnapshot(
         var room = engine.Room;
         return new LobbySnapshot(
             lifecycle.Status,
+            lifecycle.Connected,
             lifecycle.RoomId,
             lifecycle.Title,
             lifecycle.ClosingWhenEmpty,

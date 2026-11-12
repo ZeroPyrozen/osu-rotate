@@ -42,6 +42,20 @@ public class LobbyLifecycleTests
         }
 
         [Fact]
+        public void Tracks_whether_bancho_is_connected()
+        {
+            var lifecycle = new LobbyLifecycle();
+            Assert.False(lifecycle.Connected);
+            On(lifecycle, new TransportConnected());
+            Assert.True(lifecycle.Connected);
+            On(lifecycle, new TransportDisconnected("gone"));
+            Assert.False(lifecycle.Connected);
+            On(lifecycle, new TransportConnected());
+            On(lifecycle, new TransportAuthenticationFailed());
+            Assert.False(lifecycle.Connected);
+        }
+
+        [Fact]
         public void Create_sends_mp_make_and_starts_the_engine_over()
         {
             var lifecycle = Connected();
