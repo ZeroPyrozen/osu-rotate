@@ -1,0 +1,90 @@
+@using OsuRotate.Application
+@using OsuRotate.Web.Bot
+@inject LobbyRuntime Runtime
+
+<section class="lobby-lifecycle" aria-label="Lobby controls">
+    @if (LifecycleActions.CanOpen(Snapshot))
+    {
+        <form class="create" @onsubmit="CreateAsync">
+            <label>Room title <input @bind="_title" placeholder="@LifecycleActions.DefaultTitle(Snapshot)" maxlength="50" /></label>
+            <button type="submit" disabled="@_busy">Create lobby</button>
+        </form>
+        <form class="attach" @onsubmit="AttachAsync">
+            <label>Existing room <input @bind="_room" placeholder="https://osu.ppy.sh/mp/123456" /></label>
+            <button type="submit" disabled="@_busy">Attach</button>
+        </form>
+    }
+
+    @if (LifecycleActions.CanCloseWhenEmpty(Snapshot))
+    {
+        @if (Snapshot!.ClosingWhenEmpty)
+        {
+            <button class="keep-open" disabled="@_busy" @onclick="() => CloseWhenEmptyAsync(false)">Keep the lobby open</button>
+        }
+        else
+        {
+            <button class="close-when-empty" disabled="@_busy" @onclick="() => CloseWhenEmptyAsync(true)">Close when everyone has left</button>
+        }
+    }
+
+    @if (LifecycleActions.CanClose(Snapshot))
+    {
+        @if (_confirmClose)
+        {
+            <span class="confirm">
+                Close the room now? Everyone in it is sent out.
+                <button class="close-confirm" disabled="@_busy" @onclick="CloseAsync">Yes, close it</button>
+                <button class="close-cancel" @onclick="() => _confirmClose = false">No</button>
+            </span>
+        }
+        else
+        {
+            <button class="close" disabled="@_busy" @onclick="() => _confirmClose = true">Close lobby</button>
+        }
+    }
+
+    @if (_message is not null)
+    {
+        <p class="message" role="status">@_message</p>
+    }
+</section>
+
+@code {
+    private LifecycleActions? _actions;
+    private string? _title;
+    private string? _room;
+    private string? _message;
+    private bool _busy;
+    private bool _confirmClose;
+
+    [Parameter]
+    public LobbySnapshot? Snapshot { get; set; }
+
+    private LifecycleActions Actions => _actions ??= new LifecycleActions(Runtime);
+
+    private Task CreateAsync() => RunAsync(() => Actions.CreateAsync(_title), () => _title = null);
+
+    private Task AttachAsync() => RunAsync(() => Actions.AttachAsync(_room), () => _room = null);
+
+    private Task CloseAsync() => RunAsync(() => Actions.CloseAsync(), () => _confirmClose = false);
+
+    private Task CloseWhenEmptyAsync(bool enabled) => RunAsync(() => Actions.CloseWhenEmptyAsync(enabled), () => { });
+
+    private async Task RunAsync(Func<Task<string?>> action, Action onSuccess)
+    {
+        _busy = true;
+        _message = null;
+        try
+        {
+            _message = await action();
+            if (_message is null)
+            {
+                onSuccess();
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

@@ -20,6 +20,10 @@ Done when a full session can be run from the browser, and a non-owner gets 403.
 - The dashboard's public hostname. The osu! OAuth app's callback URL must match it. Everything is
   configuration, so this does not block building; a local callback works for development.
 
+- A phase 2 test, `BanchoIrcTransportTests.Stopping_ends_the_event_stream`, failed once (48 ms, so an
+  exception rather than a timeout) in a full run on 2026-11-12, and passed in 16 runs since, alone
+  and under load. The message was not kept; keep full-run output until it shows again.
+
 ## Issues
 
 01 comes first: every page needs the login. The rest are independent of each other.
