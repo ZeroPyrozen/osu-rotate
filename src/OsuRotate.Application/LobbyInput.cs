@@ -37,5 +37,8 @@ public sealed record CloseLobby : LobbyInput;
 
 public sealed record CloseLobbyWhenEmpty(bool Enabled) : LobbyInput;
 
+// Kicking a player from the room, as the owner's !mp kick would.
+public sealed record KickFromLobby(string Name) : LobbyInput;
+
 // The owner typing in the lobby from the dashboard. Sent ahead of the bot's own announcements.
 public sealed record SayInLobby(string Text) : LobbyInput;

@@ -53,6 +53,9 @@ public sealed class LobbyActor
 
     public LobbySnapshot Snapshot => Volatile.Read(ref _snapshot);
 
+    // The lobby's recent chat, for the dashboard. Memory only.
+    public ChatLog Chat { get; } = new();
+
     // Raised on the actor's loop after each input that changed the snapshot. Handlers must be quick.
     public event Action<LobbySnapshot>? SnapshotChanged;
 
@@ -163,7 +166,14 @@ public sealed class LobbyActor
         var input = envelope.Input!;
         if (input is SayInLobby say)
         {
+            Chat.Add(new ChatLine(_time.GetUtcNow(), _engine.Settings.OwnerName, say.Text, ChatSource.Owner));
             await SendAsync(new Say(say.Text, CommandPriority.Admin), cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (input is KickFromLobby kick)
+        {
+            await SendAsync(new KickPlayer(kick.Name), cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -211,6 +221,11 @@ public sealed class LobbyActor
         var commands = new List<LobbyCommand>(step.Commands);
         if (step.Forward)
         {
+            if (lobbyEvent is ChatReceived chat)
+            {
+                Chat.Add(new ChatLine(_time.GetUtcNow(), chat.Username, chat.Text, ChatSource.Player, chat.IsAction));
+            }
+
             commands.AddRange(_engine.Handle(lobbyEvent));
             commands.AddRange(_lifecycle.AfterEngine(_engine.Room.Players.Count).Commands);
         }
@@ -271,6 +286,14 @@ public sealed class LobbyActor
             }
             else
             {
+                if (command is Say announcement)
+                {
+                    foreach (var line in announcement.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    {
+                        Chat.Add(new ChatLine(_time.GetUtcNow(), _engine.Settings.OwnerName, line, ChatSource.Bot));
+                    }
+                }
+
                 await SendAsync(command, cancellationToken).ConfigureAwait(false);
             }
         }

@@ -1,0 +1,115 @@
+@using OsuRotate.Application
+@using OsuRotate.Domain
+@using OsuRotate.Web.Bot
+@inject LobbyRuntime Runtime
+
+@if (Snapshot is not null)
+{
+    <section class="lobby-moderation" aria-label="Moderation">
+        <h2>Moderation</h2>
+
+        @if (Snapshot.Status == LobbyStatus.Open && Snapshot.Players.Count > 0)
+        {
+            <ul class="players">
+                @foreach (var player in Snapshot.Players)
+                {
+                    var name = player.Name;
+                    var denied = Snapshot.Denied.Contains(Player.KeyOf(name));
+                    <li>
+                        <span class="name">@name</span>
+                        @if (_confirmKick == name)
+                        {
+                            <span class="confirm">
+                                Kick @name?
+                                <button class="kick-confirm" disabled="@_busy" @onclick="() => KickAsync(name)">Yes, kick</button>
+                                <button class="kick-cancel" @onclick="() => _confirmKick = null">No</button>
+                            </span>
+                        }
+                        else
+                        {
+                            <button class="kick" disabled="@_busy" @onclick="() => _confirmKick = name">Kick</button>
+                        }
+
+                        @if (!denied)
+                        {
+                            <button class="deny" disabled="@_busy" @onclick="() => RunAsync(() => Actions.DenyAsync(name))">Never host</button>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+
+        <form class="deny-name" @onsubmit="DenyNameAsync">
+            <label>Never give host to <input @bind="_denyName" placeholder="osu! username" autocomplete="off" /></label>
+            <button type="submit" disabled="@_busy">Add</button>
+        </form>
+
+        <h3>Never host</h3>
+        @if (Snapshot.Denied.Count == 0)
+        {
+            <p>Nobody.</p>
+        }
+        else
+        {
+            <ul class="denied">
+                @foreach (var key in Snapshot.Denied)
+                {
+                    <li>
+                        <span class="name">@key</span>
+                        <button class="allow" disabled="@_busy" @onclick="() => RunAsync(() => Actions.AllowAsync(key))">Allow again</button>
+                    </li>
+                }
+            </ul>
+        }
+
+        @if (_message is not null)
+        {
+            <p class="message" role="status">@_message</p>
+        }
+    </section>
+}
+
+@code {
+    private ModerationActions? _actions;
+    private string? _denyName;
+    private string? _confirmKick;
+    private string? _message;
+    private bool _busy;
+
+    [Parameter]
+    public LobbySnapshot? Snapshot { get; set; }
+
+    private ModerationActions Actions => _actions ??= new ModerationActions(Runtime);
+
+    private Task KickAsync(string name) => RunAsync(async () =>
+    {
+        var message = await Actions.KickAsync(name);
+        _confirmKick = null;
+        return message;
+    });
+
+    private Task DenyNameAsync() => RunAsync(async () =>
+    {
+        var message = await Actions.DenyAsync(_denyName);
+        if (message is null)
+        {
+            _denyName = null;
+        }
+
+        return message;
+    });
+
+    private async Task RunAsync(Func<Task<string?>> action)
+    {
+        _busy = true;
+        _message = null;
+        try
+        {
+            _message = await action();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

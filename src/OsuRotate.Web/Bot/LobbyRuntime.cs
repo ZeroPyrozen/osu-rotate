@@ -13,6 +13,11 @@ public sealed class LobbyRuntime : ILobbyStatusReader
     // handlers must only hand the snapshot on (Blazor pages use InvokeAsync), never wait.
     public event Action<LobbySnapshot?>? Changed;
 
+    // Each chat line as it is added. Same rule as Changed: hand the line on, never wait.
+    public event Action<ChatLine>? ChatAdded;
+
+    public IReadOnlyList<ChatLine> Chat => Actor?.Chat.Lines ?? [];
+
     public LobbyActor? Actor => Volatile.Read(ref _actor);
 
     public LobbySnapshot? Snapshot => Actor?.Snapshot;
@@ -36,12 +41,14 @@ public sealed class LobbyRuntime : ILobbyStatusReader
         if (Actor is { } previous)
         {
             previous.SnapshotChanged -= Raise;
+            previous.Chat.Added -= RaiseChat;
         }
 
         Volatile.Write(ref _actor, actor);
         if (actor is not null)
         {
             actor.SnapshotChanged += Raise;
+            actor.Chat.Added += RaiseChat;
         }
 
         Raise(actor?.Snapshot);
@@ -51,4 +58,6 @@ public sealed class LobbyRuntime : ILobbyStatusReader
     internal int ListenerCount => Changed?.GetInvocationList().Length ?? 0;
 
     private void Raise(LobbySnapshot? snapshot) => Changed?.Invoke(snapshot);
+
+    private void RaiseChat(ChatLine line) => ChatAdded?.Invoke(line);
 }

@@ -1,0 +1,107 @@
+@using System.Globalization
+@using OsuRotate.Application
+@using OsuRotate.Web.Bot
+@implements IDisposable
+@inject LobbyRuntime Runtime
+
+@* The lobby's chat as it happens. Lines are shown as text, never as markup. *@
+
+<section class="lobby-chat" aria-label="Chat">
+    <h2>Chat</h2>
+    @if (_lines.Count == 0)
+    {
+        <p>No chat yet.</p>
+    }
+    else
+    {
+        <ol class="chat-lines" aria-live="polite">
+            @foreach (var line in _lines)
+            {
+                <li class="@SourceClass(line.Source)">
+                    <time datetime="@line.At.ToString("O", CultureInfo.InvariantCulture)">@line.At.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture)</time>
+                    @if (line.IsAction)
+                    {
+                        <span class="action">* @line.From @line.Text</span>
+                    }
+                    else
+                    {
+                        <span class="from">@line.From@(line.Source == ChatSource.Bot ? " (bot)" : null):</span>
+                        <span class="text">@line.Text</span>
+                    }
+                </li>
+            }
+        </ol>
+    }
+
+    @if (ModerationActions.CanChat(Snapshot))
+    {
+        <form class="say" @onsubmit="SayAsync">
+            <label>Message <input @bind="_text" maxlength="@ModerationActions.MaxChatLength" autocomplete="off" /></label>
+            <button type="submit" disabled="@_busy">Send</button>
+        </form>
+    }
+
+    @if (_message is not null)
+    {
+        <p class="message" role="status">@_message</p>
+    }
+</section>
+
+@code {
+    private readonly List<ChatLine> _lines = [];
+    private ModerationActions? _actions;
+    private string? _text;
+    private string? _message;
+    private bool _busy;
+
+    [Parameter]
+    public LobbySnapshot? Snapshot { get; set; }
+
+    private ModerationActions Actions => _actions ??= new ModerationActions(Runtime);
+
+    protected override void OnInitialized()
+    {
+        _lines.AddRange(Runtime.Chat);
+        Runtime.ChatAdded += OnChatAdded;
+    }
+
+    // Called on the actor's loop; InvokeAsync only queues the render.
+    private void OnChatAdded(ChatLine line) =>
+        _ = InvokeAsync(() =>
+        {
+            _lines.Add(line);
+            if (_lines.Count > ChatLog.DefaultCapacity)
+            {
+                _lines.RemoveAt(0);
+            }
+
+            StateHasChanged();
+        });
+
+    private async Task SayAsync()
+    {
+        _busy = true;
+        _message = null;
+        try
+        {
+            _message = await Actions.SayAsync(_text);
+            if (_message is null)
+            {
+                _text = null;
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string SourceClass(ChatSource source) => source switch
+    {
+        ChatSource.Bot => "bot",
+        ChatSource.Owner => "owner",
+        _ => "player",
+    };
+
+    public void Dispose() => Runtime.ChatAdded -= OnChatAdded;
+}
