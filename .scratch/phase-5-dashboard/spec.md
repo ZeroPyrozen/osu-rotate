@@ -27,3 +27,9 @@ Done when a full session can be run from the browser, and a non-owner gets 403.
 ## Issues
 
 01 comes first: every page needs the login. The rest are independent of each other.
+
+## Status
+
+All eight issues are done. The done criterion is met against a fake osu! and the Bancho
+simulator. Still to see on real systems, in the phase 6 trial: the login through the Cloudflare
+Tunnel, the CSP in everyday use, and the stats' speed on the Pi.
