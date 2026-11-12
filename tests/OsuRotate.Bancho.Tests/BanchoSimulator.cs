@@ -52,6 +52,22 @@ internal sealed class BanchoSimulator : IAsyncDisposable
         }
     }
 
+    // The room is gone: a later JOIN fails with 403.
+    public void RemoveRoom(long id)
+    {
+        lock (_gate)
+        {
+            _rooms.Remove(id);
+        }
+    }
+
+    // Bancho closing a room on its own: a PART with no "Closed the match" before it.
+    public void CloseRoomFromBancho(long id)
+    {
+        RemoveRoom(id);
+        Send($":{Nick}!cho@ppy.sh PART :#mp_{id}");
+    }
+
     public void AddPlayer(string name, int id)
     {
         int slot;

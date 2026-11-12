@@ -23,9 +23,23 @@ public sealed class LobbyActorTests : IAsyncDisposable
         return _actor;
     }
 
-    private async Task<LobbyActor> StartWithPlayersAsync(Func<LobbySettings, LobbySettings>? configure = null)
+    // Connected and in an empty room 1, with the commands that took sent and cleared.
+    private async Task<LobbyActor> StartInRoomAsync(Func<LobbySettings, LobbySettings>? configure = null)
     {
         var actor = Start(configure);
+        _transport.Emit(new TransportConnected());
+        await actor.PostAsync(new AttachLobby(1));
+        await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        _transport.Emit(new RoomJoined(1));
+        _transport.Emit(new RoomStateReceived(new RoomState("room", 1, 0, string.Empty, "HeadToHead", "Score", string.Empty, [])));
+        await WaitUntilAsync(() => actor.Snapshot.Status == LobbyStatus.Open);
+        _transport.ClearSent();
+        return actor;
+    }
+
+    private async Task<LobbyActor> StartWithPlayersAsync(Func<LobbySettings, LobbySettings>? configure = null)
+    {
+        var actor = await StartInRoomAsync(configure);
         foreach (var (name, slot) in new[] { ("p1", 1), ("p2", 2), ("p3", 3) })
         {
             _transport.Emit(new PlayerJoined(name, slot, Team.None));
@@ -59,7 +73,7 @@ public sealed class LobbyActorTests : IAsyncDisposable
     [Fact]
     public async Task Bancho_events_reach_the_engine_and_its_commands_go_out()
     {
-        var actor = Start();
+        var actor = await StartInRoomAsync();
         _transport.Emit(new PlayerJoined("p1", 1, Team.None));
 
         await _transport.WaitForAsync(sent => sent.Contains(new TransferHost("p1")));
@@ -88,7 +102,7 @@ public sealed class LobbyActorTests : IAsyncDisposable
     [Fact]
     public async Task Settings_changes_show_in_the_snapshot()
     {
-        var actor = Start();
+        var actor = await StartInRoomAsync();
         var settings = actor.Snapshot.Settings with { AfkKickThreshold = 9 };
         await actor.PostAsync(new ChangeSettings(settings));
         await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
@@ -98,7 +112,7 @@ public sealed class LobbyActorTests : IAsyncDisposable
     [Fact]
     public async Task The_owner_speaks_ahead_of_announcements()
     {
-        var actor = Start();
+        var actor = await StartInRoomAsync();
         await actor.PostAsync(new SayInLobby("hello"));
         var sent = await _transport.WaitForAsync(s => s.Count == 1);
         Assert.Equal(new Say("hello", CommandPriority.Admin), sent[0]);
@@ -180,7 +194,7 @@ public sealed class LobbyActorTests : IAsyncDisposable
     [Fact]
     public async Task One_bad_input_does_not_stop_the_loop()
     {
-        var actor = Start();
+        var actor = await StartInRoomAsync();
         await actor.PostAsync(new UnknownInput());
         _transport.Emit(new PlayerJoined("p1", 1, Team.None));
 
@@ -191,7 +205,7 @@ public sealed class LobbyActorTests : IAsyncDisposable
     [Fact]
     public async Task Snapshots_are_announced_only_when_they_change()
     {
-        var actor = Start();
+        var actor = await StartInRoomAsync();
         var seen = new List<LobbySnapshot>();
         actor.SnapshotChanged += seen.Add;
 
@@ -232,13 +246,57 @@ public sealed class LobbyActorTests : IAsyncDisposable
     [Fact]
     public async Task The_end_of_the_event_stream_is_reported()
     {
-        var actor = Start();
+        var actor = await StartInRoomAsync();
         _transport.End(new IOException("gone"));
         await WaitUntilAsync(() => _diagnostics.Reports.Contains("ended gone"));
 
         // Owner actions and timers keep working.
         await actor.PostAsync(new SayInLobby("still here"));
         await _transport.WaitForAsync(sent => sent.Count == 1);
+    }
+
+    [Fact]
+    public async Task Events_before_there_is_a_room_do_not_reach_the_engine()
+    {
+        var actor = Start();
+        await actor.PostAsync(new CreateLobby("my room"));
+        await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+        // Transport events arrive in order, so once the connection's CreateRoom is out the join was handled.
+        _transport.Emit(new PlayerJoined("p1", 1, Team.None));
+        _transport.Emit(new TransportConnected());
+        var sent = await _transport.WaitForAsync(s => s.Any(c => c is CreateRoom));
+
+        Assert.Empty(actor.Snapshot.Players);
+        Assert.Equal([new CreateRoom("my room")], sent);
+    }
+
+    [Fact]
+    public async Task A_closed_room_starts_the_engine_over_with_the_same_settings()
+    {
+        var actor = await StartWithPlayersAsync(s => s with { AfkKickThreshold = 9 });
+        _transport.Emit(new RoomCloseAcknowledged());
+        await WaitUntilAsync(() => actor.Snapshot.Status == LobbyStatus.Idle);
+
+        Assert.Empty(actor.Snapshot.Players);
+        Assert.Empty(actor.Snapshot.Queue);
+        Assert.Null(actor.Snapshot.Host);
+        Assert.Equal(9, actor.Snapshot.Settings.AfkKickThreshold);
+    }
+
+    [Fact]
+    public async Task Close_when_empty_closes_after_the_last_player_leaves()
+    {
+        var actor = await StartWithPlayersAsync();
+        await actor.PostAsync(new CloseLobbyWhenEmpty(true));
+        _transport.Emit(new PlayerLeft("p1"));
+        _transport.Emit(new PlayerLeft("p2"));
+        await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.DoesNotContain(_transport.Sent, c => c is CloseRoom);
+
+        _transport.Emit(new PlayerLeft("p3"));
+        await _transport.WaitForAsync(sent => sent.Any(c => c is CloseRoom));
+        Assert.Equal(LobbyStatus.Closing, actor.Snapshot.Status);
     }
 
     [Fact]

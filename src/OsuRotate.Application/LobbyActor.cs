@@ -6,10 +6,12 @@ namespace OsuRotate.Application;
 // The single writer that owns the lobby engine. Bancho events, beatmap lookup answers and the owner's
 // actions all go through one inbox and are handled one at a time, so the engine needs no locks and a
 // recorded sequence of inputs always gives the same result. Between inputs the actor sleeps until the
-// engine's next timer is due.
+// engine's next timer is due. The lifecycle decides whether there is a room and which events reach the
+// engine; a new room starts the engine over with the same settings.
 public sealed class LobbyActor
 {
-    private readonly LobbyEngine _engine;
+    private readonly LobbyLifecycle _lifecycle;
+    private LobbyEngine _engine;
     private readonly ILobbyTransport _transport;
     private readonly IBeatmapCatalog _catalog;
     private readonly TimeProvider _time;
@@ -17,14 +19,21 @@ public sealed class LobbyActor
     private readonly Channel<Envelope> _inbox = Channel.CreateUnbounded<Envelope>(new UnboundedChannelOptions { SingleReader = true });
     private LobbySnapshot _snapshot;
 
-    public LobbyActor(LobbyEngine engine, ILobbyTransport transport, IBeatmapCatalog catalog, TimeProvider time, ILobbyDiagnostics? diagnostics = null)
+    public LobbyActor(
+        LobbyEngine engine,
+        ILobbyTransport transport,
+        IBeatmapCatalog catalog,
+        TimeProvider time,
+        ILobbyDiagnostics? diagnostics = null,
+        LobbyLifecycle? lifecycle = null)
     {
         _engine = engine;
+        _lifecycle = lifecycle ?? new LobbyLifecycle();
         _transport = transport;
         _catalog = catalog;
         _time = time;
         _diagnostics = diagnostics ?? NoLobbyDiagnostics.Instance;
-        _snapshot = LobbySnapshot.Of(engine);
+        _snapshot = LobbySnapshot.Of(engine, _lifecycle);
     }
 
     public LobbySnapshot Snapshot => Volatile.Read(ref _snapshot);
@@ -151,7 +160,11 @@ public sealed class LobbyActor
         switch (input)
         {
             case BanchoEvent e:
-                return _engine.Handle(e.Event);
+                return OnBanchoEvent(e.Event);
+            case CreateLobby or AttachLobby or CloseLobby or CloseLobbyWhenEmpty:
+                var step = _lifecycle.OnInput(input, _engine.Settings);
+                ResetIf(step);
+                return step.Commands;
             case SkipHost:
                 return _engine.Skip();
             case SkipToPlayer e:
@@ -167,6 +180,28 @@ public sealed class LobbyActor
                 return [];
             default:
                 throw new ArgumentOutOfRangeException(nameof(input), input, "Unknown lobby input.");
+        }
+    }
+
+    private List<LobbyCommand> OnBanchoEvent(LobbyEvent lobbyEvent)
+    {
+        var step = _lifecycle.OnEvent(lobbyEvent, _engine.Settings);
+        ResetIf(step);
+        var commands = new List<LobbyCommand>(step.Commands);
+        if (step.Forward)
+        {
+            commands.AddRange(_engine.Handle(lobbyEvent));
+            commands.AddRange(_lifecycle.AfterEngine(_engine.Room.Players.Count).Commands);
+        }
+
+        return commands;
+    }
+
+    private void ResetIf(LifecycleStep step)
+    {
+        if (step.ResetEngine)
+        {
+            _engine = new LobbyEngine(_engine.Settings, _time);
         }
     }
 
@@ -242,7 +277,7 @@ public sealed class LobbyActor
 
     private void Publish()
     {
-        var snapshot = LobbySnapshot.Of(_engine);
+        var snapshot = LobbySnapshot.Of(_engine, _lifecycle);
         if (snapshot.Equals(_snapshot))
         {
             return;

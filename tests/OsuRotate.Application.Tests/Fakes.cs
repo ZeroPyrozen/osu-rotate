@@ -20,6 +20,8 @@ internal sealed class FakeTransport : ILobbyTransport
 
     public void Emit(LobbyEvent lobbyEvent) => _events.Writer.TryWrite(lobbyEvent);
 
+    public void ClearSent() => _sent.Clear();
+
     public void End(Exception? error = null) => _events.Writer.TryComplete(error);
 
     public IAsyncEnumerable<LobbyEvent> Events(CancellationToken cancellationToken) => _events.Reader.ReadAllAsync(cancellationToken);
