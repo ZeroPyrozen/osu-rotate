@@ -10,6 +10,7 @@
     <Project Path="tests/OsuRotate.Architecture.Tests/OsuRotate.Architecture.Tests.csproj" />
     <Project Path="tests/OsuRotate.Bancho.Tests/OsuRotate.Bancho.Tests.csproj" />
     <Project Path="tests/OsuRotate.Domain.Tests/OsuRotate.Domain.Tests.csproj" />
+    <Project Path="tests/OsuRotate.Infrastructure.Tests/OsuRotate.Infrastructure.Tests.csproj" />
     <Project Path="tests/OsuRotate.Web.Tests/OsuRotate.Web.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">

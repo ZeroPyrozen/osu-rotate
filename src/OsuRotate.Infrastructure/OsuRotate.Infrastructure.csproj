@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
@@ -12,6 +14,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="OsuRotate.Bancho.Tests" />
     <InternalsVisibleTo Include="OsuRotate.BanchoProbe" />
+    <InternalsVisibleTo Include="OsuRotate.Infrastructure.Tests" />
   </ItemGroup>
 
 </Project>

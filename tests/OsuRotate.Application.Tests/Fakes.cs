@@ -84,6 +84,29 @@ internal sealed class FakeCatalog : IBeatmapCatalog
         _pending.GetOrAdd(beatmapId, _ => new TaskCompletionSource<BeatmapLookup>()).TrySetResult(BeatmapLookup.Found(Map(beatmapId)));
 }
 
+// Records each save with how many commands the transport had sent at that moment.
+internal sealed class RecordingStore(FakeTransport transport) : ILobbyStore
+{
+    public ConcurrentQueue<(SavedLobby Lobby, int SentBefore)> Saves { get; } = new();
+
+    public bool Fail { get; set; }
+
+    public SavedLobby? Last => Saves.LastOrDefault().Lobby;
+
+    public ValueTask<SavedLobby> LoadAsync(CancellationToken cancellationToken) => ValueTask.FromResult(SavedLobby.Empty);
+
+    public ValueTask SaveAsync(SavedLobby lobby, CancellationToken cancellationToken)
+    {
+        if (Fail)
+        {
+            throw new IOException("disk full");
+        }
+
+        Saves.Enqueue((lobby, transport.Sent.Count));
+        return ValueTask.CompletedTask;
+    }
+}
+
 internal sealed class RecordingDiagnostics : ILobbyDiagnostics
 {
     public ConcurrentQueue<string> Reports { get; } = new();
@@ -95,4 +118,6 @@ internal sealed class RecordingDiagnostics : ILobbyDiagnostics
     public void LookupFailed(int beatmapId, Exception exception) => Reports.Enqueue($"lookup {beatmapId}");
 
     public void EventsEnded(Exception? exception) => Reports.Enqueue($"ended {exception?.Message ?? "cleanly"}");
+
+    public void SaveFailed(Exception exception) => Reports.Enqueue($"save {exception.Message}");
 }

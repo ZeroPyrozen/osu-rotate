@@ -7,10 +7,13 @@ namespace OsuRotate.Application;
 // actions all go through one inbox and are handled one at a time, so the engine needs no locks and a
 // recorded sequence of inputs always gives the same result. Between inputs the actor sleeps until the
 // engine's next timer is due. The lifecycle decides whether there is a room and which events reach the
-// engine; a new room starts the engine over with the same settings.
+// engine; a new room starts the engine over with the same settings. What must survive a restart is
+// saved after each input and before its commands leave (design figure 9).
 public sealed class LobbyActor
 {
     private readonly LobbyLifecycle _lifecycle;
+    private readonly ILobbyStore? _store;
+    private SavedLobby _saved;
     private LobbyEngine _engine;
     private readonly ILobbyTransport _transport;
     private readonly IBeatmapCatalog _catalog;
@@ -25,10 +28,15 @@ public sealed class LobbyActor
         IBeatmapCatalog catalog,
         TimeProvider time,
         ILobbyDiagnostics? diagnostics = null,
-        LobbyLifecycle? lifecycle = null)
+        LobbyLifecycle? lifecycle = null,
+        ILobbyStore? store = null)
     {
         _engine = engine;
         _lifecycle = lifecycle ?? new LobbyLifecycle();
+        _store = store;
+
+        // The actor starts from what was loaded, so there is nothing new to save yet.
+        _saved = SavedLobby.Of(engine, _lifecycle);
         _transport = transport;
         _catalog = catalog;
         _time = time;
@@ -220,6 +228,7 @@ public sealed class LobbyActor
             commands = [];
         }
 
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
         foreach (var command in commands)
         {
             if (command is LookUpBeatmap lookup)
@@ -233,6 +242,36 @@ public sealed class LobbyActor
         }
 
         Publish();
+    }
+
+    // If power fails between saving and sending, recovery reads the saved state and sends again.
+    private async Task SaveAsync(CancellationToken cancellationToken)
+    {
+        if (_store is null)
+        {
+            return;
+        }
+
+        var lobby = SavedLobby.Of(_engine, _lifecycle);
+        if (lobby.Equals(_saved))
+        {
+            return;
+        }
+
+        try
+        {
+            await _store.SaveAsync(lobby, cancellationToken).ConfigureAwait(false);
+            _saved = lobby;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+#pragma warning disable CA1031 // A full disk must not stop the lobby; the next change saves again.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            _diagnostics.SaveFailed(exception);
+        }
     }
 
     private async Task SendAsync(LobbyCommand command, CancellationToken cancellationToken)

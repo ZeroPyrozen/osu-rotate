@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OsuRotate.Application;
 using OsuRotate.Domain;
 using OsuRotate.Infrastructure.Bancho;
+using OsuRotate.Infrastructure.Persistence;
 
 namespace OsuRotate.Bancho.Tests;
 
@@ -12,6 +13,7 @@ public sealed class LobbyLifecycleSimulatorTests : IAsyncLifetime
 
     private readonly BanchoSimulator _server = new();
     private readonly CancellationTokenSource _stop = new();
+    private readonly string _folder = Path.Combine(Path.GetTempPath(), "osu-rotate-tests", Guid.NewGuid().ToString("N"));
     private BanchoIrcTransport? _transport;
     private LobbyActor? _actor;
     private Task? _run;
@@ -33,7 +35,8 @@ public sealed class LobbyLifecycleSimulatorTests : IAsyncLifetime
             },
             NullLogger<BanchoIrcTransport>.Instance);
         var engine = new LobbyEngine(new LobbySettings { OwnerName = "creator", HostAfkCheckInterval = TimeSpan.Zero }, TimeProvider.System);
-        _actor = new LobbyActor(engine, _transport, new NoCatalog(), TimeProvider.System);
+        Directory.CreateDirectory(_folder);
+        _actor = new LobbyActor(engine, _transport, new NoCatalog(), TimeProvider.System, store: new SqliteLobbyStore(DatabasePath));
         _run = _actor.RunAsync(_stop.Token);
         return ValueTask.CompletedTask;
     }
@@ -49,7 +52,18 @@ public sealed class LobbyLifecycleSimulatorTests : IAsyncLifetime
         _transport?.Dispose();
         await _server.DisposeAsync();
         _stop.Dispose();
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        try
+        {
+            Directory.Delete(_folder, recursive: true);
+        }
+        catch (IOException)
+        {
+            // Left for the OS to clean up.
+        }
     }
+
+    private string DatabasePath => Path.Combine(_folder, "rotate.db");
 
     private async Task<LobbySnapshot> WaitFor(Func<LobbySnapshot, bool> condition)
     {
@@ -88,6 +102,20 @@ public sealed class LobbyLifecycleSimulatorTests : IAsyncLifetime
         Assert.Equal(_server.LastRoomId, roomId);
         Assert.Equal(1, Lines("PRIVMSG BanchoBot :!mp make 5* rotate"));
         Assert.Equal("5* rotate", Actor.Snapshot.Title);
+    }
+
+    [Fact]
+    public async Task The_room_and_queue_are_in_the_database_for_the_next_start()
+    {
+        var roomId = await CreateAsync();
+        _server.AddPlayer("p1", 11);
+        _server.AddPlayer("p2", 22);
+        await WaitFor(s => s.Queue.Count == 2 && s.Host == "p1");
+        await Actor.DrainAsync().WaitAsync(Timeout);
+
+        var saved = await new SqliteLobbyStore(DatabasePath).LoadAsync(default);
+        Assert.Equal(new SavedSession(roomId, "my room", ["p1", "p2"], "p1"), saved.Session);
+        Assert.Equal("creator", saved.Settings!.OwnerName);
     }
 
     [Fact]

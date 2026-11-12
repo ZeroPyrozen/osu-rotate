@@ -13,6 +13,9 @@ public interface ILobbyDiagnostics
     void LookupFailed(int beatmapId, Exception exception);
 
     void EventsEnded(Exception? exception);
+
+    // The lobby went on without saving; the next change tries again.
+    void SaveFailed(Exception exception);
 }
 
 public sealed class NoLobbyDiagnostics : ILobbyDiagnostics
@@ -32,6 +35,10 @@ public sealed class NoLobbyDiagnostics : ILobbyDiagnostics
     }
 
     public void EventsEnded(Exception? exception)
+    {
+    }
+
+    public void SaveFailed(Exception exception)
     {
     }
 }

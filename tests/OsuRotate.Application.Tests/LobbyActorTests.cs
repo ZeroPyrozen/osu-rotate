@@ -10,15 +10,18 @@ public sealed class LobbyActorTests : IAsyncDisposable
     private readonly FakeTransport _transport = new();
     private readonly FakeCatalog _catalog = new();
     private readonly RecordingDiagnostics _diagnostics = new();
+    private readonly RecordingStore _store;
     private readonly CancellationTokenSource _stop = new();
     private LobbyActor? _actor;
+
+    public LobbyActorTests() => _store = new RecordingStore(_transport);
     private Task? _run;
 
     private LobbyActor Start(Func<LobbySettings, LobbySettings>? configure = null)
     {
         var settings = new LobbySettings { OwnerName = "creator", HostAfkCheckInterval = TimeSpan.Zero };
         var engine = new LobbyEngine(configure?.Invoke(settings) ?? settings, _time);
-        _actor = new LobbyActor(engine, _transport, _catalog, _time, _diagnostics);
+        _actor = new LobbyActor(engine, _transport, _catalog, _time, _diagnostics, store: _store);
         _run = _actor.RunAsync(_stop.Token);
         return _actor;
     }
@@ -297,6 +300,88 @@ public sealed class LobbyActorTests : IAsyncDisposable
         _transport.Emit(new PlayerLeft("p3"));
         await _transport.WaitForAsync(sent => sent.Any(c => c is CloseRoom));
         Assert.Equal(LobbyStatus.Closing, actor.Snapshot.Status);
+    }
+
+    [Fact]
+    public async Task The_queue_is_saved_before_the_commands_that_follow_are_sent()
+    {
+        var actor = await StartInRoomAsync();
+        _transport.Emit(new PlayerJoined("p1", 1, Team.None));
+        await _transport.WaitForAsync(sent => sent.Contains(new TransferHost("p1")));
+
+        var save = Assert.Single(_store.Saves, s => s.Lobby.Session?.Queue.SequenceEqual(["p1"]) == true);
+        Assert.Equal(0, save.SentBefore);
+        Assert.Equal(1, save.Lobby.Session!.RoomId);
+        await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task Nothing_is_saved_when_nothing_that_survives_a_restart_changed()
+    {
+        var actor = await StartWithPlayersAsync();
+        var before = _store.Saves.Count;
+        _transport.Emit(new ChatReceived("p2", "hello", false));
+        _transport.Emit(new ChatReceived("p2", "!q", false));
+        await _transport.WaitForAsync(sent => sent.OfType<Say>().Any());
+        await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(before, _store.Saves.Count);
+    }
+
+    [Fact]
+    public async Task Host_deny_list_and_settings_changes_are_saved()
+    {
+        var actor = await StartWithPlayersAsync();
+        Assert.Equal("p1", _store.Last!.Session!.Host);
+
+        await actor.PostAsync(new DenyPlayer("p3"));
+        await actor.PostAsync(new ChangeSettings(actor.Snapshot.Settings with { AfkKickThreshold = 2 }));
+        await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(["p3"], _store.Last!.Denied);
+        Assert.Equal(["p1", "p2"], _store.Last.Session!.Queue);
+        Assert.Equal(2, _store.Last.Settings!.AfkKickThreshold);
+    }
+
+    [Fact]
+    public async Task Closing_saves_that_there_is_no_room()
+    {
+        var actor = await StartWithPlayersAsync();
+        _transport.Emit(new RoomCloseAcknowledged());
+        await WaitUntilAsync(() => actor.Snapshot.Status == LobbyStatus.Idle);
+        await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Null(_store.Last!.Session);
+    }
+
+    [Fact]
+    public async Task A_failed_save_is_reported_the_lobby_goes_on_and_the_next_change_saves()
+    {
+        var actor = await StartInRoomAsync();
+        _store.Fail = true;
+        _transport.Emit(new PlayerJoined("p1", 1, Team.None));
+        await _transport.WaitForAsync(sent => sent.Contains(new TransferHost("p1")));
+        Assert.Contains("save disk full", _diagnostics.Reports);
+
+        _store.Fail = false;
+        _transport.Emit(new HostChanged("p1"));
+        await WaitUntilAsync(() => _store.Last?.Session?.Host == "p1");
+        Assert.Equal(["p1"], _store.Last!.Session!.Queue);
+        await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task A_failed_save_is_tried_again_even_if_the_next_input_changes_nothing()
+    {
+        var actor = await StartInRoomAsync();
+        _store.Fail = true;
+        _transport.Emit(new PlayerJoined("p1", 1, Team.None));
+        await _transport.WaitForAsync(sent => sent.Contains(new TransferHost("p1")));
+
+        _store.Fail = false;
+        _transport.Emit(new ChatReceived("p1", "hello", false));
+        await WaitUntilAsync(() => _store.Last?.Session?.Queue.Count == 1);
+        await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
     }
 
     [Fact]
