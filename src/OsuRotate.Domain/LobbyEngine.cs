@@ -235,6 +235,7 @@ public sealed partial class LobbyEngine
 
             case MatchStarted:
                 Room.StartMatch();
+                HistoryOnMatchStarted();
                 Rotation.OnMatchStarted();
                 VotesOnMatchStarted();
                 AfkOnMatchStarted();
@@ -264,12 +265,14 @@ public sealed partial class LobbyEngine
                 }
 
                 AfkOnPlayerFinished(finisher, e.Score);
+                HistoryOnPlayerFinished(finisher, e.Score, e.Passed);
                 CheckStuckMatch();
 
                 break;
 
             case MatchFinished:
                 Room.EndMatch();
+                HistoryOnMatchEnded(MatchOutcome.Finished);
                 StopStuckMatchCheck();
                 AfkOnMatchFinished();
                 Rotation.OnMatchFinished();
@@ -286,6 +289,7 @@ public sealed partial class LobbyEngine
             case MatchAborted:
             case MatchNotInProgress when Room.IsMatching:
                 Rotation.OnMatchAborted(Room.EndMatch());
+                HistoryOnMatchEnded(MatchOutcome.Aborted);
                 StopStuckMatchCheck();
                 AfkOnMatchAborted();
                 break;

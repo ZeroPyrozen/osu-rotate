@@ -1,12 +1,13 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using OsuRotate.Application;
+using OsuRotate.Domain;
 
 namespace OsuRotate.Infrastructure.Persistence;
 
 // ILobbyStore over one SQLite file in WAL mode, which survives power loss on the Pi's SD card better
 // than the default rollback journal. Each call opens its own context; the actor is the only writer.
-public sealed class SqliteLobbyStore : ILobbyStore
+public sealed class SqliteLobbyStore : ILobbyStore, IMatchArchive
 {
     private readonly DbContextOptions<LobbyDbContext> _options;
     private readonly TimeProvider _time;
@@ -101,6 +102,82 @@ public sealed class SqliteLobbyStore : ILobbyStore
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async ValueTask SaveAsync(long? roomId, MatchRecord match, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(match);
+        await using var db = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        var sessionId = roomId is { } room
+            ? await db.LobbySessions.Where(s => s.RoomId == room && s.ClosedAt == null).Select(s => (int?)s.Id).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false)
+            : null;
+        db.Matches.Add(new MatchRow
+        {
+            SessionId = sessionId,
+            RoomId = roomId,
+            BeatmapId = match.BeatmapId,
+            HostName = match.HostName,
+            HostUserId = match.HostUserId,
+            StartedAt = match.StartedAt,
+            EndedAt = match.EndedAt,
+            Outcome = match.Outcome,
+            Scores = [.. match.Scores.Select((s, i) => new MatchScoreRow
+            {
+                Position = i,
+                Username = s.Username,
+                OsuUserId = s.OsuUserId,
+                Score = s.Score,
+                Passed = s.Passed,
+            })],
+        });
+
+        var seen = match.Scores.Where(s => s.OsuUserId is not null).Select(s => (Id: s.OsuUserId!.Value, s.Username)).ToList();
+        if (match.HostUserId is { } hostId && match.HostName is { } hostName)
+        {
+            seen.Add((hostId, hostName));
+        }
+
+        foreach (var (id, username) in seen.DistinctBy(p => p.Id))
+        {
+            var player = await db.Players.FindAsync([id], cancellationToken).ConfigureAwait(false);
+            if (player is null)
+            {
+                db.Players.Add(new PlayerRow { OsuUserId = id, Username = username, FirstSeenAt = match.EndedAt, LastSeenAt = match.EndedAt });
+            }
+            else
+            {
+                player.Username = username;
+                player.LastSeenAt = match.EndedAt;
+            }
+        }
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async ValueTask<IReadOnlyList<ArchivedMatch>> RecentAsync(int count, CancellationToken cancellationToken)
+    {
+        await using var db = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await db.Matches.AsNoTracking()
+            .Include(m => m.Scores)
+            .OrderByDescending(m => m.Id)
+            .Take(count)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. rows.Select(m => new ArchivedMatch(
+            m.Id,
+            m.RoomId,
+            new MatchRecord(
+                m.BeatmapId,
+                m.HostName,
+                m.HostUserId,
+                m.StartedAt,
+                m.EndedAt,
+                m.Outcome,
+                [.. m.Scores.OrderBy(s => s.Position).Select(s => new MatchRecordScore(s.Username, s.OsuUserId, s.Score, s.Passed))])))];
     }
 
     private async Task<LobbyDbContext> OpenAsync(CancellationToken cancellationToken)

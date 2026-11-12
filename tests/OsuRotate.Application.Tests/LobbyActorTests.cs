@@ -11,6 +11,7 @@ public sealed class LobbyActorTests : IAsyncDisposable
     private readonly FakeCatalog _catalog = new();
     private readonly RecordingDiagnostics _diagnostics = new();
     private readonly RecordingStore _store;
+    private readonly RecordingArchive _archive = new();
     private readonly CancellationTokenSource _stop = new();
     private LobbyActor? _actor;
 
@@ -21,7 +22,7 @@ public sealed class LobbyActorTests : IAsyncDisposable
     {
         var settings = new LobbySettings { OwnerName = "creator", HostAfkCheckInterval = TimeSpan.Zero };
         var engine = new LobbyEngine(configure?.Invoke(settings) ?? settings, _time);
-        _actor = new LobbyActor(engine, _transport, _catalog, _time, _diagnostics, store: _store);
+        _actor = new LobbyActor(engine, _transport, _catalog, _time, _diagnostics, store: _store, archive: _archive);
         _run = _actor.RunAsync(_stop.Token);
         return _actor;
     }
@@ -382,6 +383,59 @@ public sealed class LobbyActorTests : IAsyncDisposable
         _transport.Emit(new ChatReceived("p1", "hello", false));
         await WaitUntilAsync(() => _store.Last?.Session?.Queue.Count == 1);
         await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task A_finished_match_goes_to_the_archive_and_not_to_bancho()
+    {
+        var actor = await StartWithPlayersAsync();
+        _transport.Emit(new MatchStarted());
+        _transport.Emit(new PlayerFinished("p1", 1000, true));
+        _transport.Emit(new MatchFinished());
+        await WaitUntilAsync(() => !_archive.Saved.IsEmpty);
+        await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+        var (roomId, match) = Assert.Single(_archive.Saved);
+        Assert.Equal(1, roomId);
+        Assert.Equal("p1", match.HostName);
+        Assert.Equal([new MatchRecordScore("p1", null, 1000, true)], match.Scores);
+        Assert.DoesNotContain(_transport.Sent, c => c is RecordMatch);
+    }
+
+    [Fact]
+    public async Task A_match_that_could_not_be_saved_is_saved_with_the_next_input()
+    {
+        var actor = await StartWithPlayersAsync();
+        _archive.Fail = true;
+        _transport.Emit(new MatchStarted());
+        _transport.Emit(new MatchAborted());
+        await WaitUntilAsync(() => _diagnostics.Reports.Contains("save archive down"));
+        Assert.Empty(_archive.Saved);
+
+        _archive.Fail = false;
+        _transport.Emit(new ChatReceived("p1", "hello", false));
+        await WaitUntilAsync(() => _archive.Saved.Count == 1);
+        Assert.Equal(MatchOutcome.Aborted, _archive.Saved.Single().Match.Outcome);
+        await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task Without_an_archive_matches_are_dropped_and_never_sent()
+    {
+        var engine = new LobbyEngine(new LobbySettings { OwnerName = "creator", HostAfkCheckInterval = TimeSpan.Zero }, _time);
+        _actor = new LobbyActor(engine, _transport, _catalog, _time, _diagnostics);
+        _run = _actor.RunAsync(_stop.Token);
+        _transport.Emit(new TransportConnected());
+        await _actor.PostAsync(new AttachLobby(1));
+        _transport.Emit(new RoomJoined(1));
+        _transport.Emit(new RoomStateReceived(new RoomState("room", 1, 0, string.Empty, "HeadToHead", "Score", string.Empty, [])));
+        _transport.Emit(new PlayerJoined("p1", 1, Team.None));
+        _transport.Emit(new MatchStarted());
+        _transport.Emit(new MatchFinished());
+        _transport.Emit(new ChatReceived("p1", "!q", false));
+        await _transport.WaitForAsync(sent => sent.OfType<Say>().Any());
+
+        Assert.DoesNotContain(_transport.Sent, c => c is RecordMatch);
     }
 
     [Fact]

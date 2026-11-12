@@ -86,6 +86,15 @@ public class BanchoCommandFormatterTests
         Assert.Equal("PRIVMSG BanchoBot :!mp make room" + new string('x', 46), message.Line);
     }
 
+    // These are answered by the application; sending one to Bancho is a bug.
+    [Fact]
+    public void Application_commands_are_never_formatted_for_bancho()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => BanchoCommandFormatter.Format(new LookUpBeatmap(1, GameMode.Osu, true), Channel));
+        Assert.Throws<ArgumentOutOfRangeException>(() => BanchoCommandFormatter.Format(
+            new RecordMatch(new MatchRecord(1, null, null, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, MatchOutcome.Finished, [])), Channel));
+    }
+
     // osu-ahr's LobbyTest "remove invalid chars from lobby title" cases. This also trims the ends.
     [Theory]
     [InlineData("a", "a")]

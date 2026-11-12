@@ -33,6 +33,9 @@ public sealed record InvitePlayer(string Username) : LobbyCommand;
 // back as BeatmapLookedUp. Never send it to the transport.
 public sealed record LookUpBeatmap(int BeatmapId, GameMode Mode, bool AllowConvert) : LobbyCommand;
 
+// Also answered by the application: save the match to the history. Never send it to the transport.
+public sealed record RecordMatch(MatchRecord Match) : LobbyCommand;
+
 public sealed record SetBeatmap(int BeatmapId, int? GameMode = null, string? Note = null) : LobbyCommand;
 public sealed record SetMods(string Mods) : LobbyCommand;
 public sealed record SetRoomName(string Name) : LobbyCommand;

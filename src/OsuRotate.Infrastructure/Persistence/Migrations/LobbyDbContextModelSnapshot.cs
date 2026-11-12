@@ -76,6 +76,94 @@ namespace OsuRotate.Infrastructure.Persistence.Migrations
                     b.ToTable("LobbySession", (string)null);
                 });
 
+            modelBuilder.Entity("OsuRotate.Infrastructure.Persistence.MatchRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BeatmapId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset>("EndedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("HostName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("HostUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("RoomId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SessionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BeatmapId");
+
+                    b.HasIndex("SessionId");
+
+                    b.ToTable("Match", (string)null);
+                });
+
+            modelBuilder.Entity("OsuRotate.Infrastructure.Persistence.MatchScoreRow", b =>
+                {
+                    b.Property<long>("MatchId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("OsuUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Passed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("Score")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("MatchId", "Position");
+
+                    b.HasIndex("OsuUserId");
+
+                    b.ToTable("MatchScore", (string)null);
+                });
+
+            modelBuilder.Entity("OsuRotate.Infrastructure.Persistence.PlayerRow", b =>
+                {
+                    b.Property<int>("OsuUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset>("FirstSeenAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("OsuUserId");
+
+                    b.ToTable("Player", (string)null);
+                });
+
             modelBuilder.Entity("OsuRotate.Infrastructure.Persistence.QueueEntryRow", b =>
                 {
                     b.Property<int>("SessionId")
@@ -93,6 +181,23 @@ namespace OsuRotate.Infrastructure.Persistence.Migrations
                     b.ToTable("QueueEntry", (string)null);
                 });
 
+            modelBuilder.Entity("OsuRotate.Infrastructure.Persistence.MatchRow", b =>
+                {
+                    b.HasOne("OsuRotate.Infrastructure.Persistence.LobbySessionRow", null)
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("OsuRotate.Infrastructure.Persistence.MatchScoreRow", b =>
+                {
+                    b.HasOne("OsuRotate.Infrastructure.Persistence.MatchRow", null)
+                        .WithMany("Scores")
+                        .HasForeignKey("MatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("OsuRotate.Infrastructure.Persistence.QueueEntryRow", b =>
                 {
                     b.HasOne("OsuRotate.Infrastructure.Persistence.LobbySessionRow", null)
@@ -105,6 +210,11 @@ namespace OsuRotate.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("OsuRotate.Infrastructure.Persistence.LobbySessionRow", b =>
                 {
                     b.Navigation("Queue");
+                });
+
+            modelBuilder.Entity("OsuRotate.Infrastructure.Persistence.MatchRow", b =>
+                {
+                    b.Navigation("Scores");
                 });
 #pragma warning restore 612, 618
         }

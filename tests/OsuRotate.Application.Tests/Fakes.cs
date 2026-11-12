@@ -107,6 +107,27 @@ internal sealed class RecordingStore(FakeTransport transport) : ILobbyStore
     }
 }
 
+internal sealed class RecordingArchive : IMatchArchive
+{
+    public ConcurrentQueue<(long? RoomId, MatchRecord Match)> Saved { get; } = new();
+
+    public bool Fail { get; set; }
+
+    public ValueTask SaveAsync(long? roomId, MatchRecord match, CancellationToken cancellationToken)
+    {
+        if (Fail)
+        {
+            throw new IOException("archive down");
+        }
+
+        Saved.Enqueue((roomId, match));
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask<IReadOnlyList<ArchivedMatch>> RecentAsync(int count, CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<ArchivedMatch>>([]);
+}
+
 internal sealed class RecordingDiagnostics : ILobbyDiagnostics
 {
     public ConcurrentQueue<string> Reports { get; } = new();

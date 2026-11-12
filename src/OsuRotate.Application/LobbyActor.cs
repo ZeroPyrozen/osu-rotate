@@ -13,6 +13,8 @@ public sealed class LobbyActor
 {
     private readonly LobbyLifecycle _lifecycle;
     private readonly ILobbyStore? _store;
+    private readonly IMatchArchive? _archive;
+    private readonly List<(long? RoomId, MatchRecord Match)> _unsavedMatches = [];
     private SavedLobby _saved;
     private LobbyEngine _engine;
     private readonly ILobbyTransport _transport;
@@ -29,8 +31,10 @@ public sealed class LobbyActor
         TimeProvider time,
         ILobbyDiagnostics? diagnostics = null,
         LobbyLifecycle? lifecycle = null,
-        ILobbyStore? store = null)
+        ILobbyStore? store = null,
+        IMatchArchive? archive = null)
     {
+        _archive = archive;
         _engine = engine;
         _lifecycle = lifecycle ?? new LobbyLifecycle();
         _store = store;
@@ -228,9 +232,20 @@ public sealed class LobbyActor
             commands = [];
         }
 
+        foreach (var record in commands.OfType<RecordMatch>())
+        {
+            _unsavedMatches.Add((_lifecycle.RoomId, record.Match));
+        }
+
         await SaveAsync(cancellationToken).ConfigureAwait(false);
+        await SaveMatchesAsync(cancellationToken).ConfigureAwait(false);
         foreach (var command in commands)
         {
+            if (command is RecordMatch)
+            {
+                continue;
+            }
+
             if (command is LookUpBeatmap lookup)
             {
                 _ = LookUpAsync(lookup, cancellationToken);
@@ -271,6 +286,37 @@ public sealed class LobbyActor
 #pragma warning restore CA1031
         {
             _diagnostics.SaveFailed(exception);
+        }
+    }
+
+    // A match that could not be saved stays here and is tried again with the next input.
+    private async Task SaveMatchesAsync(CancellationToken cancellationToken)
+    {
+        if (_archive is null)
+        {
+            _unsavedMatches.Clear();
+            return;
+        }
+
+        while (_unsavedMatches.Count > 0)
+        {
+            var (roomId, match) = _unsavedMatches[0];
+            try
+            {
+                await _archive.SaveAsync(roomId, match, cancellationToken).ConfigureAwait(false);
+                _unsavedMatches.RemoveAt(0);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+#pragma warning disable CA1031 // The lobby goes on; the match is saved later.
+            catch (Exception exception)
+#pragma warning restore CA1031
+            {
+                _diagnostics.SaveFailed(exception);
+                return;
+            }
         }
     }
 

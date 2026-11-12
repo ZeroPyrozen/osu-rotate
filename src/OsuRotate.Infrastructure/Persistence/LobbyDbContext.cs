@@ -3,9 +3,12 @@ using Microsoft.EntityFrameworkCore.Design;
 
 namespace OsuRotate.Infrastructure.Persistence;
 
-// The tables recovery needs (design figure 11). Match history comes with its own tables later.
+// The tables from design figure 11: what recovery needs, and the match history.
 internal sealed class LobbyDbContext(DbContextOptions<LobbyDbContext> options) : DbContext(options)
 {
+    public DbSet<MatchRow> Matches => Set<MatchRow>();
+    public DbSet<MatchScoreRow> MatchScores => Set<MatchScoreRow>();
+    public DbSet<PlayerRow> Players => Set<PlayerRow>();
     public DbSet<LobbyConfigRow> LobbyConfig => Set<LobbyConfigRow>();
     public DbSet<LobbySessionRow> LobbySessions => Set<LobbySessionRow>();
     public DbSet<QueueEntryRow> QueueEntries => Set<QueueEntryRow>();
@@ -39,7 +42,66 @@ internal sealed class LobbyDbContext(DbContextOptions<LobbyDbContext> options) :
             e.ToTable("DenyEntry");
             e.HasKey(r => r.PlayerKey);
         });
+
+        modelBuilder.Entity<MatchRow>(e =>
+        {
+            e.ToTable("Match");
+            e.HasKey(r => r.Id);
+            e.Property(r => r.Outcome).HasConversion<string>();
+            e.HasIndex(r => r.SessionId);
+            e.HasIndex(r => r.BeatmapId);
+            e.HasOne<LobbySessionRow>().WithMany().HasForeignKey(r => r.SessionId).OnDelete(DeleteBehavior.SetNull);
+            e.HasMany(r => r.Scores).WithOne().HasForeignKey(s => s.MatchId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MatchScoreRow>(e =>
+        {
+            e.ToTable("MatchScore");
+            e.HasKey(r => new { r.MatchId, r.Position });
+            e.HasIndex(r => r.OsuUserId);
+        });
+
+        modelBuilder.Entity<PlayerRow>(e =>
+        {
+            e.ToTable("Player");
+            e.HasKey(r => r.OsuUserId);
+            e.Property(r => r.OsuUserId).ValueGeneratedNever();
+        });
     }
+}
+
+internal sealed class MatchRow
+{
+    public long Id { get; set; }
+    public int? SessionId { get; set; }
+    public long? RoomId { get; set; }
+    public int BeatmapId { get; set; }
+    public string? HostName { get; set; }
+    public int? HostUserId { get; set; }
+    public DateTimeOffset StartedAt { get; set; }
+    public DateTimeOffset EndedAt { get; set; }
+    public Domain.MatchOutcome Outcome { get; set; }
+    public List<MatchScoreRow> Scores { get; set; } = [];
+}
+
+// Position keeps the order Bancho reported the scores in.
+internal sealed class MatchScoreRow
+{
+    public long MatchId { get; set; }
+    public int Position { get; set; }
+    public required string Username { get; set; }
+    public int? OsuUserId { get; set; }
+    public long Score { get; set; }
+    public bool Passed { get; set; }
+}
+
+// Players whose osu! user id is known, with the name they last used.
+internal sealed class PlayerRow
+{
+    public int OsuUserId { get; set; }
+    public required string Username { get; set; }
+    public DateTimeOffset FirstSeenAt { get; set; }
+    public DateTimeOffset LastSeenAt { get; set; }
 }
 
 internal sealed class LobbyConfigRow
