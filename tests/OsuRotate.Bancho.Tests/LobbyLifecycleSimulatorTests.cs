@@ -15,6 +15,7 @@ public sealed class LobbyLifecycleSimulatorTests : IAsyncLifetime
     private readonly CancellationTokenSource _stop = new();
     private readonly string _folder = Path.Combine(Path.GetTempPath(), "osu-rotate-tests", Guid.NewGuid().ToString("N"));
     private BanchoIrcTransport? _transport;
+    private readonly System.Collections.Concurrent.ConcurrentQueue<LobbyStatus> _statuses = new();
     private LobbyActor? _actor;
     private Task? _run;
 
@@ -37,6 +38,13 @@ public sealed class LobbyLifecycleSimulatorTests : IAsyncLifetime
         var engine = new LobbyEngine(new LobbySettings { OwnerName = "creator", HostAfkCheckInterval = TimeSpan.Zero }, TimeProvider.System);
         Directory.CreateDirectory(_folder);
         _actor = new LobbyActor(engine, _transport, new NoCatalog(), TimeProvider.System, store: new SqliteLobbyStore(DatabasePath));
+        _actor.SnapshotChanged += s =>
+        {
+            if (_statuses.LastOrDefault() != s.Status)
+            {
+                _statuses.Enqueue(s.Status);
+            }
+        };
         _run = _actor.RunAsync(_stop.Token);
         return ValueTask.CompletedTask;
     }
@@ -185,9 +193,18 @@ public sealed class LobbyLifecycleSimulatorTests : IAsyncLifetime
         _server.AddPlayer("p2", 22);
         await WaitFor(s => s.Queue.Count == 2);
 
+        // Every status change is recorded, because Reconnecting can last only a few milliseconds.
+        var before = _statuses.Count;
         _server.DropClient();
-        await WaitFor(s => s.Status == LobbyStatus.Reconnecting);
-        var open = await WaitFor(s => s.Status == LobbyStatus.Open);
+        using (var timeout = new CancellationTokenSource(Timeout))
+        {
+            while (!_statuses.Skip(before).SequenceEqual([LobbyStatus.Reconnecting, LobbyStatus.Rejoining, LobbyStatus.Syncing, LobbyStatus.Open]))
+            {
+                await Task.Delay(10, timeout.Token);
+            }
+        }
+
+        var open = Actor.Snapshot;
 
         Assert.Equal(roomId, open.RoomId);
         Assert.Equal(["p1", "p2"], open.Queue);
