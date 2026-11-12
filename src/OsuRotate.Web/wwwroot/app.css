@@ -37,10 +37,6 @@ h1:focus {
     text-align: start;
 }
 
-.per-day .bar {
-    display: inline-block;
-    height: 0.8em;
-    min-width: 1px;
-    background: currentColor;
-    opacity: 0.4;
+.per-day meter {
+    width: 12em;
 }

@@ -58,7 +58,82 @@ sudo systemctl restart osu-rotate
 | Setting | What it is |
 | --- | --- |
 | `Bancho__Nick`, `Bancho__Password` | Your osu! username and IRC password. Without both, the bot stays Idle and does not connect. |
-| `Osu__ClientId`, `Osu__ClientSecret` | An osu! OAuth application, for map checks and recovery. Without it, maps are let through. |
+| `Osu__ClientId`, `Osu__ClientSecret` | An osu! OAuth application, for map checks, recovery and the dashboard login. Without it, maps are let through and nobody can log in. |
+| `Dashboard__OwnerUserId` | Your osu! user id. Only this account may use the dashboard. |
+| `Dashboard__Host` | The dashboard's public hostname, for example `rotate.example.com`. Other hostnames get 400 Bad Request. |
 
 The journal says which are missing when the service starts (`journalctl -u osu-rotate`).
 On a restart, the bot rejoins the room it had open and restores the queue.
+
+## Setting up the dashboard login
+
+The dashboard is reached through a Cloudflare Tunnel at a hostname of your own, for example
+`rotate.example.com` (use yours wherever this section says that). Only your osu! account can use it.
+
+### 1. Create the osu! OAuth application
+
+1. Sign in at osu.ppy.sh and open <https://osu.ppy.sh/home/account/edit#oauth>.
+2. Under **OAuth**, choose **New OAuth Application**.
+3. Give it a name, for example `osu-rotate`.
+4. Set **Application Callback URLs** to exactly `https://rotate.example.com/signin-osu`.
+   It must be `https`, with no port and no trailing slash.
+5. Choose **Register application**. Keep the page open: it shows the **Client ID** and
+   **Client Secret**. The secret stays on that page; never paste it anywhere but the Pi.
+
+The same application serves the bot's map checks, so you need only one.
+
+### 2. Find your osu! user id
+
+Open your osu! profile. The number in the address, `https://osu.ppy.sh/users/<number>`, is your id.
+
+### 3. Put the settings on the Pi
+
+```bash
+sudo nano /etc/osu-rotate/secrets.env
+```
+
+Set these four lines (remove the `#` in front of each):
+
+```bash
+Osu__ClientId=<Client ID>
+Osu__ClientSecret=<Client Secret>
+Dashboard__OwnerUserId=<your user id>
+Dashboard__Host=rotate.example.com
+```
+
+Then restart:
+
+```bash
+sudo systemctl restart osu-rotate
+```
+
+### 4. Point the tunnel at the service
+
+In the Cloudflare Tunnel's public hostname for `rotate.example.com`, set the service to
+`http://127.0.0.1:5180`. Leave **HTTP Host Header** empty, so the app sees `rotate.example.com`.
+
+The app trusts the tunnel's `X-Forwarded-Proto` and `X-Forwarded-For` headers only when they come
+from this machine. That is how it knows the visitor used HTTPS, and builds the callback URL with
+`https://`. Run `cloudflared` on the Pi itself; if it ran elsewhere, logins would fail.
+
+### 5. Log in
+
+Open `https://rotate.example.com`. You are sent to osu! to approve the application, then back to
+the dashboard. Anyone else who logs in gets "This dashboard is for its owner only." and no session.
+
+If something goes wrong:
+
+| What you see | What to check |
+| --- | --- |
+| "osu! login is not set up." | One of `Osu__ClientId`, `Osu__ClientSecret` or `Dashboard__OwnerUserId` is missing. |
+| osu! says the redirect URI is invalid | The callback URL in step 1 must match `https://<Dashboard__Host>/signin-osu` exactly. |
+| 400 Bad Request on every page | `Dashboard__Host` doesn't match the hostname in the address bar. |
+| "The osu! login did not complete." | Usually the client secret is wrong, or the login took too long. Try again. |
+
+### What the app does to stay safe
+
+- Cookies are sent over HTTPS only, can't be read by scripts, and the login lasts 7 days.
+- Every form that posts carries an antiforgery token.
+- Every response carries a content security policy that allows only the app's own scripts and
+  styles, no framing, and no plugins. HTTPS responses also carry `Strict-Transport-Security`.
+- Error details stay in the journal and are never sent to the browser.

@@ -58,7 +58,7 @@
                     <tr>
                         <td>@day.Day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)</td>
                         <td>@day.Matches</td>
-                        <td><span class="bar" style="width: @Width(day.Matches)"></span></td>
+                        <td><meter min="0" max="@_busiest" value="@day.Matches"></meter></td>
                     </tr>
                 }
             </tbody>
@@ -71,6 +71,7 @@
 
     private int _days = 30;
     private MatchStats? _stats;
+    private int _busiest = 1;
     private bool _failed;
 
     protected override Task OnInitializedAsync() => LoadAsync();
@@ -92,6 +93,9 @@
         try
         {
             _stats = await Archive.StatsAsync(new MatchStatsQuery(now.AddDays(-_days), offset), CancellationToken.None);
+
+            // The busiest day fills the bar. A meter, not a styled span: the CSP allows no style attributes.
+            _busiest = _stats.PerDay.Count == 0 ? 1 : _stats.PerDay.Max(d => d.Matches);
             _failed = false;
         }
 #pragma warning disable CA1031 // A database error shows a message instead of breaking the page.
@@ -104,11 +108,4 @@
 
     private static string Count(int count, string noun) =>
         string.Create(CultureInfo.InvariantCulture, $"{count} {noun}{(count == 1 ? string.Empty : noun.EndsWith('h') ? "es" : "s")}");
-
-    // The busiest day fills the bar.
-    private string Width(int matches)
-    {
-        var most = _stats!.PerDay.Max(d => d.Matches);
-        return string.Create(CultureInfo.InvariantCulture, $"{100.0 * matches / most:0.#}%");
-    }
 }

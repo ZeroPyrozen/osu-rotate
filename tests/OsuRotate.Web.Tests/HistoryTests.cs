@@ -201,8 +201,8 @@ public class HistoryTests
             Assert.Contains("alice: 2 matches", html, StringComparison.Ordinal);
             Assert.Contains("&lt;i&gt;bob&lt;/i&gt;: 1 match<", html, StringComparison.Ordinal);
             Assert.DoesNotContain("old:", html, StringComparison.Ordinal);
-            Assert.Contains("width: 100%", html, StringComparison.Ordinal);
-            Assert.Contains("width: 50%", html, StringComparison.Ordinal);
+            Assert.Contains("<meter min=\"0\" max=\"2\" value=\"2\">", html, StringComparison.Ordinal);
+            Assert.Contains("<meter min=\"0\" max=\"2\" value=\"1\">", html, StringComparison.Ordinal);
         }
     }
 

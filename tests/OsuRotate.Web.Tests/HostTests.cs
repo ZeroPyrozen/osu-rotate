@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Builder;
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.AspNetCore.Authentication.OAuth;
@@ -48,6 +49,18 @@ public sealed class BotFactory : WebApplicationFactory<Program>
 
     public LobbyRuntime Runtime => Services.GetRequiredService<LobbyRuntime>();
 
+    // Runs the host as on the Pi instead of in Development.
+    public BotFactory InProduction()
+    {
+        _environment = "Production";
+        return this;
+    }
+
+    private string _environment = "Development";
+
+    // The address requests come from; TestServer has none. Loopback is cloudflared on the Pi.
+    public IPAddress? RemoteAddress { get; set; }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         foreach (var (key, value) in _settings)
@@ -55,11 +68,26 @@ public sealed class BotFactory : WebApplicationFactory<Program>
             builder.UseSetting(key, value);
         }
 
+        builder.UseEnvironment(_environment);
         builder.ConfigureTestServices(services =>
         {
+            services.AddSingleton<Microsoft.AspNetCore.Hosting.IStartupFilter>(new RemoteAddressFilter(this));
             services.PostConfigure<OAuthOptions>(Auth.OwnerAuthentication.OsuScheme, options => options.Backchannel = new HttpClient(Osu, disposeHandler: false));
             services.AddHttpClient("osu").ConfigurePrimaryHttpMessageHandler(() => Osu);
         });
+    }
+
+    private sealed class RemoteAddressFilter(BotFactory factory) : Microsoft.AspNetCore.Hosting.IStartupFilter
+    {
+        public Action<Microsoft.AspNetCore.Builder.IApplicationBuilder> Configure(Action<Microsoft.AspNetCore.Builder.IApplicationBuilder> next) => app =>
+        {
+            app.Use((context, nextMiddleware) =>
+            {
+                context.Connection.RemoteIpAddress = factory.RemoteAddress;
+                return nextMiddleware(context);
+            });
+            next(app);
+        };
     }
 
     // A browser on https://localhost that does not follow redirects.
