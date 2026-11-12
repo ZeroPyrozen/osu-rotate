@@ -177,7 +177,16 @@ public sealed class LobbyLifecycleSimulatorTests : IAsyncLifetime
 
         await Actor.PostAsync(new CloseLobbyWhenEmpty(true));
         await WaitFor(s => s.ClosingWhenEmpty);
-        Assert.Contains(_server.Received, r => r.Line.StartsWith($"PRIVMSG #mp_{roomId} :!mp password ", StringComparison.Ordinal));
+
+        // The snapshot changes before the command has been through the send queue.
+        using (var timeout = new CancellationTokenSource(Timeout))
+        {
+            while (!_server.Received.Any(r => r.Line.StartsWith($"PRIVMSG #mp_{roomId} :!mp password ", StringComparison.Ordinal)))
+            {
+                await Task.Delay(10, timeout.Token);
+            }
+        }
+
         Assert.Equal(0, Lines($"PRIVMSG #mp_{roomId} :!mp close"));
 
         _server.RemovePlayer("p1");

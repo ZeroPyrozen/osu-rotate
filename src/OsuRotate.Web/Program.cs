@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.DataProtection;
 using OsuRotate.Infrastructure;
+using OsuRotate.Web.Bot;
 using OsuRotate.Web.Components;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,6 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSystemd();
 builder.Services.AddHealthChecks();
 builder.Services.AddInfrastructure();
+builder.Services.AddBot(builder.Configuration, builder.Environment);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 

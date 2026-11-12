@@ -21,3 +21,9 @@ Done when killing the process mid-match restores the same queue in the Bancho si
 ## Issues
 
 01 is a prerequisite for the rest. 06 needs 02 to 05. 08 can start once 01 to 03 are done.
+
+## Status
+
+All eight issues are done. The done criterion is met in the simulator (issue 06). Still to see on
+real systems, in the phase 6 trial: the service starting on the Pi, the osu! API's converts list,
+match score `pass` field and `player-kicked` events, and start time on the Pi.

@@ -43,4 +43,22 @@ ssh -L 5180:127.0.0.1:5180 pi@raspberrypi.local
 | `/opt/osu-rotate/pi-install.sh` | Copy of the install script, for rollbacks |
 | `/etc/osu-rotate/secrets.env` | Settings and secrets (root only). Deploys never overwrite it |
 | `/etc/systemd/system/osu-rotate.service` | Replaced on every deploy. Use `sudo systemctl edit osu-rotate` for local changes |
-| `/var/lib/osu-rotate/` | Data-protection keys, and later the database |
+| `/var/lib/osu-rotate/` | Data-protection keys and the database (`rotate.db`, with its `-wal` and `-shm` files) |
+
+## Connecting the bot
+
+The bot reads its settings from `/etc/osu-rotate/secrets.env` (see `osu-rotate.env.example`).
+Deploys never overwrite that file, so after a deploy that adds settings, add them by hand:
+
+```bash
+sudo nano /etc/osu-rotate/secrets.env
+sudo systemctl restart osu-rotate
+```
+
+| Setting | What it is |
+| --- | --- |
+| `Bancho__Nick`, `Bancho__Password` | Your osu! username and IRC password. Without both, the bot stays Idle and does not connect. |
+| `Osu__ClientId`, `Osu__ClientSecret` | An osu! OAuth application, for map checks and recovery. Without it, maps are let through. |
+
+The journal says which are missing when the service starts (`journalctl -u osu-rotate`).
+On a restart, the bot rejoins the room it had open and restores the queue.

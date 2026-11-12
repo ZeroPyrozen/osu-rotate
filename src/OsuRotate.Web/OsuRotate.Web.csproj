@@ -13,6 +13,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="OsuRotate.Web.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\OsuRotate.Application\OsuRotate.Application.csproj" />
     <ProjectReference Include="..\OsuRotate.Infrastructure\OsuRotate.Infrastructure.csproj" />
   </ItemGroup>
