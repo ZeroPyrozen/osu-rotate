@@ -14,7 +14,7 @@ public interface IMatchArchive
 
 public sealed record ArchivedMatch(long Id, long? RoomId, MatchRecord Match);
 
-public sealed class InMemoryMatchArchive : IMatchArchive
+public sealed class InMemoryMatchArchive : IMatchArchive, IMatchArchiveReader
 {
     private readonly List<ArchivedMatch> _matches = [];
     private readonly Lock _gate = new();
@@ -34,6 +34,22 @@ public sealed class InMemoryMatchArchive : IMatchArchive
         lock (_gate)
         {
             return ValueTask.FromResult<IReadOnlyList<ArchivedMatch>>([.. Enumerable.Reverse(_matches).Take(count)]);
+        }
+    }
+
+    public ValueTask<MatchPage> PageAsync(long? beforeId, int size, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            return ValueTask.FromResult(MatchQueries.Page(_matches, beforeId, size));
+        }
+    }
+
+    public ValueTask<MatchStats> StatsAsync(MatchStatsQuery query, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            return ValueTask.FromResult(MatchQueries.Stats(_matches, query));
         }
     }
 }

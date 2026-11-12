@@ -52,6 +52,7 @@ public sealed class BotConfiguration
 internal sealed partial class LobbyHostService(
     BotConfiguration configuration,
     LobbyRuntime runtime,
+    SqliteLobbyStore store,
     IHttpClientFactory httpClients,
     ILoggerFactory loggers,
     TimeProvider time) : BackgroundService
@@ -62,13 +63,6 @@ internal sealed partial class LobbyHostService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var folder = Path.GetDirectoryName(Path.GetFullPath(configuration.DatabasePath));
-        if (folder is not null)
-        {
-            Directory.CreateDirectory(folder);
-        }
-
-        var store = new SqliteLobbyStore(configuration.DatabasePath, time);
         using var api = new OsuApiClient(
             httpClients.CreateClient("osu"),
             new OsuApiOptions { ClientId = configuration.ApiClientId, ClientSecret = configuration.ApiClientSecret ?? string.Empty },
@@ -166,6 +160,19 @@ public static class BotServiceCollectionExtensions
         services.AddSingleton<LobbyRuntime>();
         services.AddSingleton<ILobbyStatusReader>(sp => sp.GetRequiredService<LobbyRuntime>());
         services.AddSingleton(TimeProvider.System);
+
+        // One store for the bot and the history pages, so the database is migrated once.
+        services.AddSingleton(sp =>
+        {
+            var bot = sp.GetRequiredService<BotConfiguration>();
+            if (Path.GetDirectoryName(Path.GetFullPath(bot.DatabasePath)) is { } folder)
+            {
+                Directory.CreateDirectory(folder);
+            }
+
+            return new SqliteLobbyStore(bot.DatabasePath, sp.GetRequiredService<TimeProvider>());
+        });
+        services.AddSingleton<IMatchArchiveReader>(sp => sp.GetRequiredService<SqliteLobbyStore>());
         services.AddHttpClient("osu", client => client.Timeout = TimeSpan.FromSeconds(15));
         services.AddHostedService<LobbyHostService>();
         return services;

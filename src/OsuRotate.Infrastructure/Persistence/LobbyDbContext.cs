@@ -50,6 +50,7 @@ internal sealed class LobbyDbContext(DbContextOptions<LobbyDbContext> options) :
             e.Property(r => r.Outcome).HasConversion<string>();
             e.HasIndex(r => r.SessionId);
             e.HasIndex(r => r.BeatmapId);
+            e.HasIndex(r => r.StartedAt);
             e.HasOne<LobbySessionRow>().WithMany().HasForeignKey(r => r.SessionId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(r => r.Scores).WithOne().HasForeignKey(s => s.MatchId).OnDelete(DeleteBehavior.Cascade);
         });

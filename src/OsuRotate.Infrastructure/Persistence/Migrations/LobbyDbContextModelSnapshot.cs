@@ -113,6 +113,8 @@ namespace OsuRotate.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("SessionId");
 
+                    b.HasIndex("StartedAt");
+
                     b.ToTable("Match", (string)null);
                 });
 
