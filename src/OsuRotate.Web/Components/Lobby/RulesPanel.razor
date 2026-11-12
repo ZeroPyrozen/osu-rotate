@@ -1,0 +1,174 @@
+@using OsuRotate.Application
+@using OsuRotate.Domain
+@using OsuRotate.Web.Bot
+@inject LobbyRuntime Runtime
+
+@* UC8. The form is filled from the lobby once and then left to the owner until saved or reset. *@
+
+@if (_form is not null)
+{
+    <section class="lobby-rules" aria-label="Rules">
+        <h2>Rules</h2>
+        <form class="rules" @onsubmit="SaveAsync">
+            <fieldset>
+                <legend>Map regulation</legend>
+                <label><input type="checkbox" @bind="_form.RegulationEnabled" /> Check maps</label>
+                <label>Lowest star rating <input type="number" step="0.01" min="0" @bind="_form.StarMin" /></label>
+                <label>Highest star rating <input type="number" step="0.01" min="0" @bind="_form.StarMax" /></label>
+                <label>Shortest length (seconds) <input type="number" min="0" @bind="_form.LengthMinSeconds" /></label>
+                <label>Longest length (seconds) <input type="number" min="0" @bind="_form.LengthMaxSeconds" /></label>
+                <label>
+                    Game mode
+                    <select @bind="_form.Mode">
+                        @foreach (var mode in Enum.GetValues<GameMode>())
+                        {
+                            <option value="@mode">@mode.OfficialName()</option>
+                        }
+                    </select>
+                </label>
+                <label><input type="checkbox" @bind="_form.AllowConvert" /> Allow converts</label>
+                <label>Rejected picks before losing the turn (0 never) <input type="number" min="0" @bind="_form.ViolationsAllowed" /></label>
+                <p class="hint">0 means no limit.</p>
+            </fieldset>
+
+            <fieldset>
+                <legend>Room</legend>
+                <label><input type="checkbox" @bind="_form.KeepMode" /> Keep the team and score mode</label>
+                <label>
+                    Team mode
+                    <select @bind="_form.Team">
+                        @foreach (var team in Enum.GetValues<TeamMode>())
+                        {
+                            <option value="@team">@team</option>
+                        }
+                    </select>
+                </label>
+                <label>
+                    Score mode
+                    <select @bind="_form.Score">
+                        @foreach (var score in Enum.GetValues<ScoreMode>())
+                        {
+                            <option value="@score">@score</option>
+                        }
+                    </select>
+                </label>
+                <label>Size (0 not kept) <input type="number" min="0" max="@KeepCommand.MaxSize" @bind="_form.Size" /></label>
+                <label>
+                    Password
+                    <select @bind="_form.Password">
+                        <option value="@PasswordKeeping.NotKept">Not kept</option>
+                        <option value="@PasswordKeeping.Open">No password</option>
+                        <option value="@PasswordKeeping.Set">Keep a password</option>
+                    </select>
+                </label>
+                @if (_form.Password == PasswordKeeping.Set)
+                {
+                    <label>New password <input type="password" autocomplete="new-password" @bind="_form.NewPassword" placeholder="@(_hasPassword ? "unchanged" : null)" /></label>
+                }
+                <label><input type="checkbox" @bind="_form.KeepMods" /> Keep the mods</label>
+                <label>Mods <input @bind="_form.ModsText" placeholder="HD HR, Freemod or None" autocomplete="off" /></label>
+                <label>Title (empty not kept) <input @bind="_form.Title" maxlength="@RoomKeeping.MaxTitleLength" autocomplete="off" /></label>
+            </fieldset>
+
+            <fieldset>
+                <legend>Votes</legend>
+                <label>Skip: share <input type="number" step="0.01" min="0" max="1" @bind="_form.SkipShare" /> and at least <input type="number" min="1" @bind="_form.SkipMinimum" /></label>
+                <label>Start: share <input type="number" step="0.01" min="0" max="1" @bind="_form.StartShare" /> and at least <input type="number" min="1" @bind="_form.StartMinimum" /></label>
+                <label><input type="checkbox" @bind="_form.StartWhenAllReady" /> Start when everyone is ready</label>
+                <label>Abort: share <input type="number" step="0.01" min="0" max="1" @bind="_form.AbortShare" /> and at least <input type="number" min="1" @bind="_form.AbortMinimum" /></label>
+            </fieldset>
+
+            <fieldset>
+                <legend>AFK</legend>
+                <label><input type="checkbox" @bind="_form.SkipAfkHost" /> Skip an AFK host</label>
+                <label>First host check (seconds) <input type="number" min="0" @bind="_form.HostAfkFirstCheckSeconds" /></label>
+                <label>Host check every (seconds, 0 off) <input type="number" min="0" @bind="_form.HostAfkCheckIntervalSeconds" /></label>
+                <label><input type="checkbox" @bind="_form.AfkKickEnabled" /> Kick AFK players</label>
+                <label>Kick after this many points <input type="number" min="1" @bind="_form.AfkKickThreshold" /></label>
+                <label>Kick cooldown (seconds) <input type="number" min="10" @bind="_form.AfkKickCooldownSeconds" /></label>
+            </fieldset>
+
+            <fieldset>
+                <legend>Matches</legend>
+                <label><input type="checkbox" @bind="_form.AutoStartEnabled" /> Auto start</label>
+                <label><input type="checkbox" @bind="_form.AutoStartClearsHost" /> Auto start clears the host</label>
+                <label>Auto start after (seconds) <input type="number" min="15" @bind="_form.AutoStartDelaySeconds" /></label>
+                <label><input type="checkbox" @bind="_form.AbortStuckMatch" /> Abort a stuck match</label>
+                <label>Stuck once this share finished <input type="number" step="0.01" min="0" max="1" @bind="_form.StuckMatchFinishedShare" /></label>
+                <label>and still running after (seconds, 0 off) <input type="number" min="0" @bind="_form.StuckMatchDelaySeconds" /></label>
+                <label>Kick a host who kicks this many players (0 off) <input type="number" min="0" @bind="_form.HostKickTolerance" /></label>
+                <label>Check for host kicks every (seconds) <input type="number" min="10" @bind="_form.HostKickCheckIntervalSeconds" /></label>
+            </fieldset>
+
+            <fieldset>
+                <legend>Info message</legend>
+                <label>Said for !info and !help <textarea rows="4" @bind="_form.InfoMessage"></textarea></label>
+                <p class="hint">${version} becomes the running version. Each line is said separately.</p>
+                <label>Say it every (seconds, 0 off) <input type="number" min="0" @bind="_form.InfoAnnouncementIntervalSeconds" /></label>
+            </fieldset>
+
+            <button type="submit" disabled="@_busy">Save rules</button>
+            <button type="button" class="reset" disabled="@_busy" @onclick="Reset">Reset</button>
+        </form>
+
+        @if (_message is not null)
+        {
+            <p class="message" role="status">@_message</p>
+        }
+    </section>
+}
+
+@code {
+    private RuleForm? _form;
+    private RuleActions? _actions;
+    private string? _message;
+    private bool _busy;
+    private bool _hasPassword;
+
+    [Parameter]
+    public LobbySnapshot? Snapshot { get; set; }
+
+    private RuleActions Actions => _actions ??= new RuleActions(Runtime);
+
+    protected override void OnParametersSet()
+    {
+        if (_form is null && Snapshot is not null)
+        {
+            Reset();
+        }
+    }
+
+    private void Reset()
+    {
+        if (Snapshot is not null)
+        {
+            _form = RuleForm.From(Snapshot.Settings);
+            _hasPassword = Snapshot.Settings.Keeping.Password is { Length: > 0 };
+            _message = null;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_form is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        _message = null;
+        try
+        {
+            _message = await Actions.SaveAsync(_form) ?? "Saved.";
+            if (_message == "Saved.")
+            {
+                _hasPassword |= _form.Password == PasswordKeeping.Set;
+                _form.NewPassword = null;
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

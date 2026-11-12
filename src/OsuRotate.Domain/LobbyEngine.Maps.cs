@@ -154,14 +154,6 @@ public sealed partial class LobbyEngine
         }
 
         UpdateSettings(_settings with { Regulation = after });
-        if (after.Enabled != before.Enabled)
-        {
-            Announce(after.Enabled ? "Map Checker plugin enabled." : "Map Checker plugin disabled.");
-        }
-
-        if ((after with { Enabled = before.Enabled, ViolationsAllowed = before.ViolationsAllowed }) != before)
-        {
-            Announce($"New regulation: {after.Describe()}");
-        }
+        AnnounceRegulationChange(before, after);
     }
 }

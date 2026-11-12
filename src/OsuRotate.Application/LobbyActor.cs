@@ -207,8 +207,9 @@ public sealed class LobbyActor
             case CancelCountdown:
                 return _engine.CancelCountdown();
             case ChangeSettings e:
-                _engine.UpdateSettings(e.Settings);
-                return [];
+                // Without a room the keeper puts the room right when it enters one.
+                var changed = _engine.ChangeSettings(e.Settings);
+                return _lifecycle.Status == LobbyStatus.Open ? changed : [];
             default:
                 throw new ArgumentOutOfRangeException(nameof(input), input, "Unknown lobby input.");
         }
