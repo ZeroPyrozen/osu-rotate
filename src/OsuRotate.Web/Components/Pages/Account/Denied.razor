@@ -1,0 +1,21 @@
+@page "/denied"
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@layout Layout.AccountLayout
+
+<PageTitle>Not allowed - osu-rotate</PageTitle>
+
+<h1>Not allowed</h1>
+<p class="lede">This dashboard is for its owner only.</p>
+<p class="fine">
+    If you are the owner, you're logged in to osu! with another account. Log out on
+    <a href="https://osu.ppy.sh" target="_blank" rel="noopener noreferrer">osu.ppy.sh</a>, then log in here again.
+</p>
+<a class="button" href="/signin">Log in again</a>
+
+@code {
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    protected override void OnInitialized() => HttpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
+}

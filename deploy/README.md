@@ -171,9 +171,9 @@ HTTPS, and builds the callback URL with `https://`.
 
 ### 5. Log in
 
-From a device on your tailnet, open `https://<name>`. You are sent to osu! to approve the
-application, then back to the dashboard. Anyone else who logs in gets "This dashboard is for its
-owner only." and no session.
+Open `https://<name>`. The sign-in page's **Log in with osu!** sends you to osu! to approve the
+application (the first time), then back to the page you wanted. Anyone else who logs in lands on
+"Not allowed: this dashboard is for its owner only." with no session.
 
 If something goes wrong:
 

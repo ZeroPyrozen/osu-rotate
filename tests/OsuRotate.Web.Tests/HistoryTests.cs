@@ -228,7 +228,7 @@ public class HistoryTests
         {
             var response = await _factory.Browser().GetAsync(new Uri("/history", UriKind.Relative));
             Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
-            Assert.StartsWith("https://osu.ppy.sh/oauth/authorize", response.Headers.Location!.ToString(), StringComparison.Ordinal);
+            Assert.Equal("/signin", new Uri(new Uri("https://localhost"), response.Headers.Location!).AbsolutePath);
         }
 
         [Fact]

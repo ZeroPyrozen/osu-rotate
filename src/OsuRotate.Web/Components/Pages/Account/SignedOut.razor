@@ -1,0 +1,11 @@
+@page "/signed-out"
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@layout Layout.AccountLayout
+@using OsuRotate.Web.Auth
+
+<PageTitle>Signed out - osu-rotate</PageTitle>
+
+<h1>Signed out</h1>
+<p class="lede">Signed out of osu-rotate on this browser. The lobby keeps running.</p>
+<a class="button" href="@OwnerAuthentication.SignInPath">Log in again</a>

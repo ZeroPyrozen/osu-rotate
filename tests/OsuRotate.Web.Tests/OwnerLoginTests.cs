@@ -18,10 +18,39 @@ public sealed partial class OwnerLoginTests : IDisposable
         response.Headers.TryGetValues("Set-Cookie", out var cookies)
         && cookies.Any(c => c.StartsWith("osu-rotate=", StringComparison.Ordinal) && !c.Contains("expires=Thu, 01 Jan 1970", StringComparison.OrdinalIgnoreCase));
 
-    [Fact]
-    public async Task A_visitor_is_sent_to_osu_to_log_in_with_only_the_identify_scope()
+    private static void AssertSentToSignIn(HttpResponseMessage response)
     {
-        var response = await _factory.Browser().GetAsync(new Uri("/", UriKind.Relative));
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal("/signin", new Uri(new Uri("https://localhost"), response.Headers.Location!).AbsolutePath);
+    }
+
+    private static void AssertBackOnSignInWithAFailure(HttpResponseMessage response)
+    {
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal("/signin?failed=1", response.Headers.Location?.OriginalString);
+    }
+
+    [Fact]
+    public async Task A_visitor_is_sent_to_the_sign_in_page_which_offers_osu()
+    {
+        var browser = _factory.Browser();
+        var response = await browser.GetAsync(new Uri("/history", UriKind.Relative));
+        AssertSentToSignIn(response);
+        Assert.Contains("ReturnUrl=%2Fhistory", response.Headers.Location!.OriginalString, StringComparison.Ordinal);
+
+        var page = await browser.GetAsync(response.Headers.Location);
+        Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+        var html = await page.Content.ReadAsStringAsync();
+        Assert.Contains("<h1>Log in</h1>", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"/signin/osu?returnUrl=%2Fhistory\"", html, StringComparison.Ordinal);
+        Assert.Contains("Log in with osu!", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("blazor-error-ui", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_sign_in_button_goes_to_osu_with_only_the_identify_scope()
+    {
+        var response = await _factory.Browser().GetAsync(BotFactory.SignInButton());
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         var location = response.Headers.Location!;
@@ -65,13 +94,16 @@ public sealed partial class OwnerLoginTests : IDisposable
     {
         var (browser, callback) = await _factory.LogInAsync(userId: 1);
 
-        Assert.Equal(HttpStatusCode.Forbidden, callback.StatusCode);
+        Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
+        Assert.Equal("/denied", callback.Headers.Location?.OriginalString);
         Assert.False(SetsSessionCookie(callback));
-        Assert.Equal("This dashboard is for its owner only.", await callback.Content.ReadAsStringAsync());
 
-        // Still not logged in: the dashboard sends them to osu! again.
-        var page = await browser.GetAsync(new Uri("/", UriKind.Relative));
-        Assert.Equal(HttpStatusCode.Redirect, page.StatusCode);
+        var denied = await browser.GetAsync(new Uri("/denied", UriKind.Relative));
+        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        Assert.Contains("This dashboard is for its owner only.", await denied.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        // Still not logged in: the dashboard sends them to the sign-in page again.
+        AssertSentToSignIn(await browser.GetAsync(new Uri("/", UriKind.Relative)));
     }
 
     [Fact]
@@ -105,10 +137,10 @@ public sealed partial class OwnerLoginTests : IDisposable
     public async Task A_forged_state_is_refused()
     {
         var browser = _factory.Browser();
-        await browser.GetAsync(new Uri("/", UriKind.Relative));
+        await browser.GetAsync(BotFactory.SignInButton());
         var callback = await browser.GetAsync(new Uri("/signin-osu?code=x&state=forged", UriKind.Relative));
 
-        Assert.Equal(HttpStatusCode.BadRequest, callback.StatusCode);
+        AssertBackOnSignInWithAFailure(callback);
         Assert.False(SetsSessionCookie(callback));
         Assert.DoesNotContain(_factory.Osu.Requests, r => r.Contains("/oauth/token", StringComparison.Ordinal));
     }
@@ -117,11 +149,11 @@ public sealed partial class OwnerLoginTests : IDisposable
     public async Task A_callback_from_another_browser_is_refused()
     {
         // The state is real, but this browser never started the login, so it has no correlation cookie.
-        var challenge = await _factory.Browser().GetAsync(new Uri("/", UriKind.Relative));
+        var challenge = await _factory.Browser().GetAsync(BotFactory.SignInButton());
         var state = BotFactory.StateFrom(challenge);
         var callback = await _factory.Browser().GetAsync(new Uri($"/signin-osu?code=x&state={Uri.EscapeDataString(state)}", UriKind.Relative));
 
-        Assert.Equal(HttpStatusCode.BadRequest, callback.StatusCode);
+        AssertBackOnSignInWithAFailure(callback);
         Assert.False(SetsSessionCookie(callback));
     }
 
@@ -130,12 +162,12 @@ public sealed partial class OwnerLoginTests : IDisposable
     {
         _factory.Osu.MeId = FakeOsu.OwnerId;
         var browser = _factory.Browser();
-        var challenge = await browser.GetAsync(new Uri("/", UriKind.Relative));
+        var challenge = await browser.GetAsync(BotFactory.SignInButton());
         var callbackUri = new Uri($"/signin-osu?code=the-code&state={Uri.EscapeDataString(BotFactory.StateFrom(challenge))}", UriKind.Relative);
         Assert.Equal(HttpStatusCode.Redirect, (await browser.GetAsync(callbackUri)).StatusCode);
 
         var replay = await _factory.Browser().GetAsync(callbackUri);
-        Assert.Equal(HttpStatusCode.BadRequest, replay.StatusCode);
+        AssertBackOnSignInWithAFailure(replay);
         Assert.False(SetsSessionCookie(replay));
     }
 
@@ -143,10 +175,12 @@ public sealed partial class OwnerLoginTests : IDisposable
     public async Task A_failed_token_exchange_is_refused()
     {
         _factory.Osu.FailToken = true;
-        var (_, callback) = await _factory.LogInAsync();
+        var (browser, callback) = await _factory.LogInAsync();
 
-        Assert.Equal(HttpStatusCode.BadRequest, callback.StatusCode);
+        AssertBackOnSignInWithAFailure(callback);
         Assert.False(SetsSessionCookie(callback));
+        var page = await browser.GetStringAsync(callback.Headers.Location);
+        Assert.Contains("The osu! login did not complete. Try again.", page, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -162,9 +196,11 @@ public sealed partial class OwnerLoginTests : IDisposable
         Assert.Equal(HttpStatusCode.Redirect, signOut.StatusCode);
         Assert.Equal("/signed-out", signOut.Headers.Location?.OriginalString);
 
-        var page = await browser.GetAsync(new Uri("/", UriKind.Relative));
-        Assert.Equal(HttpStatusCode.Redirect, page.StatusCode);
-        Assert.Equal("osu.ppy.sh", page.Headers.Location?.Host);
+        var signedOut = await browser.GetStringAsync(new Uri("/signed-out", UriKind.Relative));
+        Assert.Contains("<h1>Signed out</h1>", signedOut, StringComparison.Ordinal);
+        Assert.Contains("href=\"/signin\"", signedOut, StringComparison.Ordinal);
+
+        AssertSentToSignIn(await browser.GetAsync(new Uri("/", UriKind.Relative)));
     }
 
     [Fact]
@@ -178,19 +214,53 @@ public sealed partial class OwnerLoginTests : IDisposable
     }
 
     [Fact]
-    public async Task The_health_check_and_signed_out_page_need_no_login()
+    public async Task The_health_check_and_the_account_pages_need_no_login()
     {
         var browser = _factory.Browser();
         Assert.Equal(HttpStatusCode.OK, (await browser.GetAsync(new Uri("/healthz", UriKind.Relative))).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await browser.GetAsync(new Uri("/signed-out", UriKind.Relative))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await browser.GetAsync(new Uri("/signin", UriKind.Relative))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await browser.GetAsync(new Uri("/denied", UriKind.Relative))).StatusCode);
+    }
+
+    [Fact]
+    public async Task The_owner_on_the_sign_in_page_goes_straight_on()
+    {
+        var (browser, _) = await _factory.LogInAsync();
+        var page = await browser.GetAsync(new Uri("/signin?ReturnUrl=%2Fhistory", UriKind.Relative));
+        Assert.Equal(HttpStatusCode.Redirect, page.StatusCode);
+        Assert.EndsWith("/history", page.Headers.Location!.OriginalString, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("/history", "/history")]
+    [InlineData("/", "/")]
+    [InlineData(null, "/")]
+    [InlineData("", "/")]
+    [InlineData("https://evil.example.com/", "/")]
+    [InlineData("//evil.example.com/", "/")]
+    [InlineData("/\\evil.example.com/", "/")]
+    [InlineData("history", "/")]
+    [InlineData("/x?next=https://evil.example.com", "/")]
+    public void Only_a_path_on_this_site_is_kept_to_return_to(string? returnUrl, string expected) =>
+        Assert.Equal(expected, Auth.OwnerAuthentication.LocalPath(returnUrl));
+
+    [Fact]
+    public async Task The_sign_in_button_never_returns_to_another_site()
+    {
+        _factory.Osu.MeId = FakeOsu.OwnerId;
+        var browser = _factory.Browser();
+        var challenge = await browser.GetAsync(new Uri("/signin/osu?returnUrl=https%3A%2F%2Fevil.example.com%2F", UriKind.Relative));
+        var callback = await browser.GetAsync(new Uri($"/signin-osu?code=the-code&state={Uri.EscapeDataString(BotFactory.StateFrom(challenge))}", UriKind.Relative));
+
+        Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
+        Assert.Equal("/", callback.Headers.Location?.OriginalString);
     }
 
     [Fact]
     public async Task Pages_other_than_home_also_need_the_owner()
     {
-        var response = await _factory.Browser().GetAsync(new Uri("/anything-else", UriKind.Relative));
-        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
-        Assert.Equal("osu.ppy.sh", response.Headers.Location?.Host);
+        AssertSentToSignIn(await _factory.Browser().GetAsync(new Uri("/anything-else", UriKind.Relative)));
     }
 
     [Theory]
@@ -202,9 +272,16 @@ public sealed partial class OwnerLoginTests : IDisposable
         using var factory = new BotFactory().With(key, value);
         try
         {
-            var response = await factory.Browser().GetAsync(new Uri("/", UriKind.Relative));
+            var browser = factory.Browser();
+            var response = await browser.GetAsync(new Uri("/signin", UriKind.Relative));
             Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-            Assert.Contains("Dashboard__OwnerUserId", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+            var html = await response.Content.ReadAsStringAsync();
+            Assert.Contains("Dashboard__OwnerUserId", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("Log in with osu!", html, StringComparison.Ordinal);
+
+            // The button's address can't reach osu! either.
+            var button = await browser.GetAsync(BotFactory.SignInButton());
+            Assert.Equal("/signin", button.Headers.Location?.OriginalString);
         }
         finally
         {
