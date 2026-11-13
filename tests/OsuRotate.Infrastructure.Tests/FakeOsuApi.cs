@@ -55,7 +55,10 @@ internal sealed class FakeOsuApi : HttpMessageHandler
             var response = Json(scripted.Status, scripted.Body);
             if (scripted.RetryAfter is { } seconds)
             {
-                response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(seconds));
+                // A negative value stands for a Retry-After date that has already passed.
+                response.Headers.RetryAfter = seconds < 0
+                    ? new System.Net.Http.Headers.RetryConditionHeaderValue(DateTimeOffset.UnixEpoch)
+                    : new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(seconds));
             }
 
             return response;
