@@ -75,6 +75,30 @@ public sealed class LobbyActorTests : IAsyncDisposable
         _stop.Dispose();
     }
 
+    // Phase 6, issue 05: every input and every command reaches the trace, in order. The owner's own
+    // chat is traced as an input only, so its text never reaches the trace as a Say.
+    [Fact]
+    public async Task The_trace_sees_inputs_and_commands_in_order()
+    {
+        var actor = await StartWithPlayersAsync();
+        _diagnostics.Trace.Clear();
+
+        await actor.PostAsync(new SkipHost());
+        await actor.PostAsync(new SayInLobby("hello"));
+        await actor.PostAsync(new KickFromLobby("p3"));
+        await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+        var trace = _diagnostics.Trace.ToList();
+        var skip = trace.IndexOf("in SkipHost");
+        var say = trace.IndexOf("in SayInLobby");
+        var kick = trace.IndexOf("in KickFromLobby");
+        Assert.True(skip >= 0 && say > skip && kick > say, string.Join(", ", trace));
+        Assert.Contains("out TransferHost", trace[skip..say]);
+        Assert.DoesNotContain("out Say", trace[say..kick]);
+        Assert.Equal("out KickPlayer", trace[kick + 1]);
+        Assert.DoesNotContain(trace, line => line.Contains("TimerTick", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task Bancho_events_reach_the_engine_and_its_commands_go_out()
     {

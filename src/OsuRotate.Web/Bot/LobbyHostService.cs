@@ -101,7 +101,7 @@ internal sealed partial class LobbyHostService(
             store,
             store,
             history);
-        LogStarted(_logger, Version, recovered.Session?.RoomId, recovered.MatchRunning);
+        LogStarted(_logger, Version, recovered.Session?.RoomId.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none", recovered.MatchRunning);
 
         runtime.Attach(actor);
         try
@@ -125,14 +125,14 @@ internal sealed partial class LobbyHostService(
         return plus < 0 ? version : version[..plus];
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Bancho:Nick or Bancho__Password is not set, so the bot will not connect and the lobby stays Idle.")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Bancho__Nick or Bancho__Password is not set, so the bot will not connect and the lobby stays Idle.")]
     private static partial void LogNotConfigured(ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Osu:ClientId or Osu__ClientSecret is not set: maps are not checked, and recovery cannot tell whether a match is running.")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Osu__ClientId or Osu__ClientSecret is not set: maps are not checked, and recovery cannot tell whether a match is running.")]
     private static partial void LogNoApi(ILogger logger);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "osu-rotate {Version} started. Saved room: {RoomId}. Match running: {MatchRunning}.")]
-    private static partial void LogStarted(ILogger logger, string version, long? roomId, bool matchRunning);
+    private static partial void LogStarted(ILogger logger, string version, string roomId, bool matchRunning);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "The lobby has stopped. The room is left open for the next start.")]
     private static partial void LogStopped(ILogger logger);

@@ -172,4 +172,11 @@ internal sealed class RecordingDiagnostics : ILobbyDiagnostics
     public void EventsEnded(Exception? exception) => Reports.Enqueue($"ended {exception?.Message ?? "cleanly"}");
 
     public void SaveFailed(Exception exception) => Reports.Enqueue($"save {exception.Message}");
+
+    // The trace, kept apart from the failure reports.
+    public ConcurrentQueue<string> Trace { get; } = new();
+
+    public void Received(LobbyInput input) => Trace.Enqueue($"in {input.GetType().Name}");
+
+    public void Sending(LobbyCommand command) => Trace.Enqueue($"out {command.GetType().Name}");
 }
