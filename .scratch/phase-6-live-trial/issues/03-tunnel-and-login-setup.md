@@ -1,32 +1,29 @@
 # Tailscale and dashboard login
 
-Status: ready-for-agent
+Status: ready-for-human
 
 Blocked by: 01
 
-The dashboard is served to the owner's tailnet with `tailscale serve` (ADR 0001), at
-`https://<machine>.<tailnet>.ts.net[:port]`. The owner already has a tailnet with HTTPS names.
+The dashboard is served to the owner's tailnet under its own name, by a second, rootless
+Tailscale node on the Pi called `osu-rotate` (ADR 0001): `https://osu-rotate.<tailnet>.ts.net`.
 
-Owner's steps, on the Pi and in their own accounts:
+Agent's part, done: `deploy/tailscale-node.sh` (install, status, remove) with
+`deploy/tests/tailscale-node.test.sh` in CI on Ubuntu and Debian 13, and the setup steps in
+`deploy/README.md`.
 
-1. Check Tailscale on the Pi (`tailscale status`); install it and join the tailnet if needed.
-   Check what `tailscale serve status` already serves, to pick the port: 443 if it's free,
-   otherwise another, such as 8443.
-2. Serve the dashboard on port 8443: `tailscale serve --bg --https=8443 http://127.0.0.1:5180`
-   (with the Pi's rootless setup, no `sudo`, and the CLI needs its `--socket`; see Comments).
-   No Funnel.
-3. Create the osu! OAuth application with the callback
-   `https://<machine>.<tailnet>.ts.net[:port]/signin-osu`, as `deploy/README.md` describes.
-4. Put `Osu__ClientId`, `Osu__ClientSecret`, `Dashboard__OwnerUserId` and `Dashboard__Host`
-   (the `ts.net` name, without port) in `/etc/osu-rotate/secrets.env`. Leave `Bancho__Nick` and
-   `Bancho__Password` empty for now, so the bot stays Idle while the login is tested.
+Owner's steps, on the Pi and in their own accounts, following the README:
 
-Agent's part: turn steps 1 to 4 into a checklist the owner follows (no secret or tailnet name is
-typed into the agent or the repo), and replace the Cloudflare Tunnel parts of `deploy/README.md`
-with the Tailscale setup.
+1. Copy `deploy/tailscale-node.sh` to the Pi and run `bash tailscale-node.sh install`, without
+   sudo. Approve the device from the link it prints. Turn off key expiry for `osu-rotate` in the
+   admin console.
+2. Create the osu! OAuth application with the callback it printed,
+   `https://osu-rotate.<tailnet>.ts.net/signin-osu`.
+3. Put `Osu__ClientId`, `Osu__ClientSecret`, `Dashboard__OwnerUserId` and `Dashboard__Host` in
+   `/etc/osu-rotate/secrets.env`. Leave `Bancho__Nick` and `Bancho__Password` empty for now, so
+   the bot stays Idle while the login is tested.
 
-Done when the README covers Tailscale, and the owner has `tailscale serve` and the settings in
-place.
+Done when the node is on the tailnet serving `127.0.0.1:5180` without Funnel, and the OAuth app and
+settings are in place.
 
 ## Comments
 
@@ -50,3 +47,10 @@ another app over HTTPS, so its machine name may already be taken on port 443.
 - Tailscale's source (v1.102.3, `ipn/ipnlocal/serve.go`) keeps the original `Host` header and sets
   `X-Forwarded-Proto: https`, `X-Forwarded-For` (the tailnet address) and `X-Forwarded-Host`. The
   app needs no change for the callback to be `https://<name>:8443/signin-osu`.
+
+2026-11-13: the owner doesn't want the dashboard under the existing node's name (it would have
+been `:8443` there), so it gets its own node, `osu-rotate`. Tailscale Services was the other way,
+but needs the host node tagged, which would touch the existing public site. The script's parsing
+of `tailscale status --json` and `serve status`, and the flags it uses (`up --hostname`,
+`serve --bg --https`, `serve reset`, `tailscaled --port=0`), were checked against v1.102.3 on the
+Pi, read-only.
