@@ -32,7 +32,12 @@
         }
     }
 
-    @if (LifecycleActions.CanClose(Snapshot))
+    @if (LifecycleActions.CanClose(Snapshot) && Snapshot!.RoomId is null)
+    {
+        @* Still waiting for Bancho to make the room: there is nothing to close yet, only to stop. *@
+        <button class="close" disabled="@_busy" @onclick="CloseAsync">Cancel</button>
+    }
+    else if (LifecycleActions.CanClose(Snapshot))
     {
         @if (_confirmClose)
         {

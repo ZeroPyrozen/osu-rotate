@@ -10,21 +10,20 @@
 
 <h1 class="page-title">Lobby</h1>
 
-@* The desk: what the room is doing on the left, its chat beside it. The sections are placed by
-   app.css (desk-main is a column whose order puts the queue right under the status). *@
-<div class="desk">
+@* The desk: the room on the left (status, the match, the players), its chat and the rarely used
+   controls beside it. app.css orders the sections; with no room open, creating one comes first.
+   The rules have their own page. *@
+<div class="desk @(_snapshot?.RoomId is null ? "no-room" : null)">
     <div class="desk-main">
         <LobbyView Snapshot="_snapshot" />
         <QueueControls Snapshot="_snapshot" />
         <LifecycleControls Snapshot="_snapshot" />
-        <ModerationPanel Snapshot="_snapshot" />
     </div>
-    <aside class="desk-side" aria-label="Chat">
+    <aside class="desk-side">
         <ChatPanel Snapshot="_snapshot" />
+        <ModerationPanel Snapshot="_snapshot" />
     </aside>
 </div>
-
-<RulesPanel Snapshot="_snapshot" />
 
 @code {
     private LobbySnapshot? _snapshot;

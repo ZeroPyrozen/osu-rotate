@@ -1,0 +1,40 @@
+@page "/rules"
+@using OsuRotate.Application
+@using OsuRotate.Web.Bot
+@using OsuRotate.Web.Components.Lobby
+@attribute [Authorize(Policy = OsuRotate.Web.Auth.OwnerAuthentication.OwnerPolicy)]
+@implements IDisposable
+@inject LobbyRuntime Runtime
+
+<PageTitle>Rules - osu-rotate</PageTitle>
+
+<h1 class="page-title">Rules</h1>
+
+@* The lobby's rules on their own page, as lazer keeps room settings apart from the room: the
+   form is long, and under the lobby it pushed the page to three screens. *@
+@if (_snapshot is null)
+{
+    <p class="status-note" role="status">The bot is starting. The rules appear in a moment.</p>
+}
+
+<RulesPanel Snapshot="_snapshot" />
+
+@code {
+    private LobbySnapshot? _snapshot;
+
+    protected override void OnInitialized()
+    {
+        _snapshot = Runtime.Snapshot;
+        Runtime.Changed += OnChanged;
+    }
+
+    // Called on the actor's loop; InvokeAsync only queues the render.
+    private void OnChanged(LobbySnapshot? snapshot) =>
+        _ = InvokeAsync(() =>
+        {
+            _snapshot = snapshot;
+            StateHasChanged();
+        });
+
+    public void Dispose() => Runtime.Changed -= OnChanged;
+}

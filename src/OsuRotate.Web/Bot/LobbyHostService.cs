@@ -84,6 +84,7 @@ internal sealed partial class LobbyHostService(
         if (transport is null)
         {
             LogNotConfigured(_logger);
+            runtime.Problem = NotConfigured;
         }
 
         if (!new OsuApiOptions { ClientId = configuration.ApiClientId, ClientSecret = configuration.ApiClientSecret ?? string.Empty }.IsConfigured)
@@ -114,6 +115,9 @@ internal sealed partial class LobbyHostService(
             LogStopped(_logger);
         }
     }
+
+    public const string NotConfigured =
+        "The bot has no Bancho login, so it cannot connect or open a room. Set Bancho__Nick and Bancho__Password in the service's environment file, then restart the service.";
 
     private static string ReadVersion() =>
         ShortVersion(typeof(LobbyHostService).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0");

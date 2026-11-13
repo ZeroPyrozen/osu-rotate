@@ -1,0 +1,200 @@
+@using System.Globalization
+@using OsuRotate.Application
+@using OsuRotate.Domain
+@using OsuRotate.Web.Bot
+@inject LobbyRuntime Runtime
+
+@* Everyone in the room, once: in host-queue order, each row with what can be done to that player.
+   Before this the same players were listed four times (queue, queue editor, players, moderation),
+   each list with different buttons. Names from Bancho are shown as text, never as markup. *@
+
+@if (Snapshot is { RoomId: not null })
+{
+    var rows = Rows(Snapshot);
+    var open = Snapshot.Status == LobbyStatus.Open;
+    var canReorder = QueueActions.CanReorder(Snapshot);
+    var canSkip = QueueActions.CanSkip(Snapshot);
+    var teams = Snapshot.Players.Any(p => p.Team != Team.None);
+
+    <section class="lobby-players" aria-label="Players">
+        <div class="section-head">
+            <h2>Players</h2>
+            <span class="count">@Snapshot.Players.Count / @Capacity(Snapshot)</span>
+        </div>
+        @if (rows.Count == 0)
+        {
+            <p class="empty">The room is empty. The first player to join becomes host.</p>
+        }
+        else
+        {
+            <ol class="roster">
+                @foreach (var row in rows)
+                {
+                    var name = row.Name;
+                    <li class="@(row.IsHost ? "host" : null)" @key="name">
+                        <span class="pos" title="@(row.Position is null ? "Not in the host queue" : "Place in the host queue")">@(row.Position?.ToString(CultureInfo.InvariantCulture) ?? "–")</span>
+                        <span class="who">
+                            @if (row.Player?.OsuUserId is { } id)
+                            {
+                                <a class="name" href="@UserUrl(id)" target="_blank" rel="noopener noreferrer">@name</a>
+                            }
+                            else
+                            {
+                                <span class="name">@name</span>
+                            }
+                            @if (row.IsHost)
+                            {
+                                <span class="badge host">Host</span>
+                            }
+                            @if (row.IsReferee)
+                            {
+                                <span class="badge">Referee</span>
+                            }
+                            @if (row.IsDenied)
+                            {
+                                <span class="badge denied">Never host</span>
+                            }
+                        </span>
+                        @if (row.Player is { } player)
+                        {
+                            <span class="where">
+                                <span class="slot">Slot @player.Slot</span>
+                                @if (teams)
+                                {
+                                    <span class="team @player.Team.ToString().ToLowerInvariant()">@(player.Team == Team.None ? "No team" : player.Team.ToString())</span>
+                                }
+                                <span class="state @player.Status.ToString().ToLowerInvariant()">@StateText(player.Status)</span>
+                            </span>
+                        }
+                        @if (open)
+                        {
+                            <span class="actions">
+                                @if (_confirmKick == name)
+                                {
+                                    <span class="confirm">
+                                        Kick @name?
+                                        <button class="kick-confirm" disabled="@_busy" @onclick="() => KickAsync(name)">Yes, kick</button>
+                                        <button class="kick-cancel" @onclick="() => _confirmKick = null">No</button>
+                                    </span>
+                                }
+                                else
+                                {
+                                    @if (row.Position is { } position && canReorder)
+                                    {
+                                        <button class="up" disabled="@(_busy || position == 1)" title="Move up in the queue" aria-label="@($"Move {name} up")" @onclick="() => RunAsync(() => Queue.MoveAsync(name, -1))">↑</button>
+                                        <button class="down" disabled="@(_busy || position == Snapshot.Queue.Count)" title="Move down in the queue" aria-label="@($"Move {name} down")" @onclick="() => RunAsync(() => Queue.MoveAsync(name, 1))">↓</button>
+                                    }
+                                    @if (row.Position is not null && !row.IsHost && canSkip)
+                                    {
+                                        <button class="give-host" disabled="@_busy" @onclick="() => RunAsync(() => Queue.GiveHostAsync(name))">Give host</button>
+                                    }
+                                    @if (row.Player is not null)
+                                    {
+                                        <button class="kick" disabled="@_busy" @onclick="() => _confirmKick = name">Kick</button>
+                                    }
+                                    @if (row.IsDenied)
+                                    {
+                                        <button class="allow" disabled="@_busy" @onclick="() => RunAsync(() => Moderation.AllowAsync(name))">Allow host</button>
+                                    }
+                                    else
+                                    {
+                                        <button class="deny" disabled="@_busy" @onclick="() => RunAsync(() => Moderation.DenyAsync(name))">Never host</button>
+                                    }
+                                }
+                            </span>
+                        }
+                    </li>
+                }
+            </ol>
+        }
+        @if (Snapshot.Referees.Count > 0)
+        {
+            <p class="referees">Referees: @string.Join(", ", Snapshot.Referees)</p>
+        }
+        @if (_message is not null)
+        {
+            <p class="message" role="status">@_message</p>
+        }
+    </section>
+}
+
+@code {
+    // One line of the roster. Position is the place in the host queue, or null for someone in the
+    // room who is not queued (a player who is never given host).
+    public sealed record Row(string Name, int? Position, PlayerSnapshot? Player, bool IsHost, bool IsReferee, bool IsDenied);
+
+    private QueueActions? _queue;
+    private ModerationActions? _moderation;
+    private string? _confirmKick;
+    private string? _message;
+    private bool _busy;
+
+    [Parameter]
+    public LobbySnapshot? Snapshot { get; set; }
+
+    private QueueActions Queue => _queue ??= new QueueActions(Runtime);
+
+    private ModerationActions Moderation => _moderation ??= new ModerationActions(Runtime);
+
+    // The queue first, in order, then anyone else in the room by slot.
+    public static IReadOnlyList<Row> Rows(LobbySnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        var players = new Dictionary<string, PlayerSnapshot>(StringComparer.Ordinal);
+        foreach (var player in snapshot.Players)
+        {
+            players[player.Name] = player;
+        }
+
+        Row Make(string name, int? position) => new(
+            name,
+            position,
+            players.GetValueOrDefault(name),
+            name == snapshot.Host,
+            snapshot.Referees.Contains(Player.KeyOf(name)),
+            snapshot.Denied.Contains(Player.KeyOf(name)));
+
+        var rows = snapshot.Queue.Select((name, i) => Make(name, i + 1)).ToList();
+        var queued = snapshot.Queue.ToHashSet(StringComparer.Ordinal);
+        rows.AddRange(snapshot.Players.Where(p => !queued.Contains(p.Name)).OrderBy(p => p.Slot).Select(p => Make(p.Name, null)));
+        return rows;
+    }
+
+    // The kept room size when there is one; a room has 16 slots otherwise.
+    public static int Capacity(LobbySnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        return snapshot.Settings.Keeping.Size > 0 ? snapshot.Settings.Keeping.Size : 16;
+    }
+
+    private Task KickAsync(string name) => RunAsync(async () =>
+    {
+        var message = await Moderation.KickAsync(name);
+        _confirmKick = null;
+        return message;
+    });
+
+    private async Task RunAsync(Func<Task<string?>> action)
+    {
+        _busy = true;
+        _message = null;
+        try
+        {
+            _message = await action();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string UserUrl(int userId) => string.Create(CultureInfo.InvariantCulture, $"https://osu.ppy.sh/users/{userId}");
+
+    private static string StateText(MatchStatus status) => status switch
+    {
+        MatchStatus.Playing => "Playing",
+        MatchStatus.Finished => "Finished",
+        MatchStatus.InLobby => "In lobby",
+        _ => "–",
+    };
+}

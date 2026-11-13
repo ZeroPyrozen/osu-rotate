@@ -253,6 +253,14 @@ public class LifecycleControlsTests
         }
 
         [Fact]
+        public async Task A_room_bancho_has_not_made_yet_offers_cancel_rather_than_close()
+        {
+            var html = await RenderAsync(Snapshot(LobbyStatus.Creating));
+            Assert.Contains(">Cancel<", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("Close lobby", html, StringComparison.Ordinal);
+        }
+
+        [Fact]
         public async Task A_room_closing_when_empty_offers_to_keep_it_open()
         {
             var html = await RenderAsync(Snapshot(LobbyStatus.Open, 7, closing: true));

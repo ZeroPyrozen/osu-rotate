@@ -10,10 +10,13 @@
     <h2>Chat</h2>
     @if (_lines.Count == 0)
     {
-        <p>No chat yet.</p>
+        <p class="empty">No chat yet.</p>
     }
     else
     {
+        @* The scroller is a reversed column around the list, which keeps it at the newest line
+           as lines arrive, with no script. The list itself stays in reading order. *@
+        <div class="chat-scroll">
         <ol class="chat-lines" aria-live="polite">
             @foreach (var line in _lines)
             {
@@ -21,24 +24,29 @@
                     <time datetime="@line.At.ToString("O", CultureInfo.InvariantCulture)">@line.At.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture)</time>
                     @if (line.IsAction)
                     {
-                        <span class="action">* @line.From @line.Text</span>
+                        <span class="action">* @line.From @Shown(line.Text)</span>
                     }
                     else
                     {
                         <span class="from">@line.From@(line.Source == ChatSource.Bot ? " (bot)" : null):</span>
-                        <span class="text">@line.Text</span>
+                        <span class="text">@Shown(line.Text)</span>
                     }
                 </li>
             }
         </ol>
+        </div>
     }
 
     @if (ModerationActions.CanChat(Snapshot))
     {
         <form class="say" @onsubmit="SayAsync">
-            <label>Message <input @bind="_text" maxlength="@ModerationActions.MaxChatLength" autocomplete="off" /></label>
+            <label>Message <input @bind="_text" maxlength="@ModerationActions.MaxChatLength" autocomplete="off" placeholder="Say something in the lobby" /></label>
             <button type="submit" disabled="@_busy">Send</button>
         </form>
+    }
+    else
+    {
+        <p class="hint">You can chat here once a room is open.</p>
     }
 
     @if (_message is not null)
@@ -95,6 +103,10 @@
             _busy = false;
         }
     }
+
+    // The bot puts a zero-width space in names it lists so they don't ping the players; on the
+    // page it only breaks the name in two at the end of a line.
+    private static string Shown(string text) => text.Replace("\u200B", string.Empty, StringComparison.Ordinal);
 
     private static string SourceClass(ChatSource source) => source switch
     {

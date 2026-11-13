@@ -3,57 +3,42 @@
 @using OsuRotate.Web.Bot
 @inject LobbyRuntime Runtime
 
+@* The match: start it, stop the countdown, abort it, or pass host on. These act at once, whatever
+   the votes say. Moving players in the queue is on each player's row in the player list. *@
+
 @if (Snapshot is { Status: LobbyStatus.Open })
 {
-    <section class="lobby-host-controls" aria-label="Host controls">
-        <h2>Host controls</h2>
-
+    <section class="lobby-host-controls" aria-label="Match">
+        <h2>Match</h2>
         <div class="match-controls">
             @if (QueueActions.CanStart(Snapshot))
             {
                 <form class="start" @onsubmit="StartAsync">
-                    <label>Countdown (seconds) <input @bind="_countdown" inputmode="numeric" placeholder="0" size="4" /></label>
+                    <label>Countdown <input @bind="_countdown" inputmode="numeric" placeholder="0" size="4" aria-describedby="countdown-hint" /></label>
                     <button type="submit" disabled="@_busy">Start match</button>
                 </form>
             }
-
             @if (QueueActions.CanCancelCountdown(Snapshot))
             {
                 <button class="cancel-countdown" disabled="@_busy" @onclick="() => RunAsync(() => Actions.CancelCountdownAsync())">Stop the countdown</button>
             }
-
             @if (QueueActions.CanAbort(Snapshot))
             {
                 <button class="abort" disabled="@_busy" @onclick="() => RunAsync(() => Actions.AbortAsync())">Abort the match</button>
             }
-
             @if (QueueActions.CanSkip(Snapshot))
             {
                 <button class="skip" disabled="@_busy" @onclick="() => RunAsync(() => Actions.SkipHostAsync())">Skip the host</button>
             }
         </div>
-
-        @if (QueueActions.CanReorder(Snapshot))
+        @if (QueueActions.CanStart(Snapshot))
         {
-            <ol class="queue-editor">
-                @for (var i = 0; i < Snapshot.Queue.Count; i++)
-                {
-                    var name = Snapshot.Queue[i];
-                    var first = i == 0;
-                    var last = i == Snapshot.Queue.Count - 1;
-                    <li>
-                        <span class="name">@name</span>
-                        <button class="up" disabled="@(_busy || first)" aria-label="@($"Move {name} up")" @onclick="() => RunAsync(() => Actions.MoveAsync(name, -1))">Up</button>
-                        <button class="down" disabled="@(_busy || last)" aria-label="@($"Move {name} down")" @onclick="() => RunAsync(() => Actions.MoveAsync(name, 1))">Down</button>
-                        @if (name != Snapshot.Host)
-                        {
-                            <button class="give-host" disabled="@_busy" @onclick="() => RunAsync(() => Actions.GiveHostAsync(name))">Give host</button>
-                        }
-                    </li>
-                }
-            </ol>
+            <p class="hint" id="countdown-hint">Seconds to wait before the match starts. Leave it empty to start now.</p>
         }
-
+        else if (Snapshot.Players.Count == 0)
+        {
+            <p class="hint">A match can start once someone is in the room.</p>
+        }
         @if (_message is not null)
         {
             <p class="message" role="status">@_message</p>

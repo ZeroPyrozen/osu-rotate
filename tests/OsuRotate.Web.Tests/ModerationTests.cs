@@ -193,14 +193,15 @@ public class ModerationTests
         }
 
         [Fact]
-        public async Task Moderation_lists_players_and_the_deny_list()
+        public async Task The_never_host_list_shows_everyone_on_it()
         {
             var html = Html(await RenderAsync<ModerationPanel>(Snapshot(denied: ["p_2", "far_away"])));
 
-            Assert.Equal(2, html.Split(">Kick<").Length - 1);
-            Assert.Equal(1, html.Split("Never host</button>").Length - 1);
             Assert.Contains("far_away", html, StringComparison.Ordinal);
             Assert.Equal(2, html.Split("Allow again").Length - 1);
+
+            // Kicking and denying a player in the room are on that player's row in the player list.
+            Assert.DoesNotContain(">Kick<", html, StringComparison.Ordinal);
         }
 
         [Fact]

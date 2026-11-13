@@ -62,6 +62,16 @@ public sealed class RuleForm
     public string InfoMessage { get; set; } = string.Empty;
     public int InfoAnnouncementIntervalSeconds { get; set; }
 
+    // A copy that later edits to this form do not touch.
+    public RuleForm Clone() => (RuleForm)MemberwiseClone();
+
+    // Whether two forms hold the same values: every field on the page, the new password included.
+    public bool SameAs(RuleForm other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        return System.Text.Json.JsonSerializer.Serialize(this) == System.Text.Json.JsonSerializer.Serialize(other);
+    }
+
     public static RuleForm From(LobbySettings s)
     {
         ArgumentNullException.ThrowIfNull(s);
