@@ -440,19 +440,54 @@ tr:last-child td {
     min-width: 0;
 }
 
-/* The order to read the room in: status, who hosts next, the host's controls, the room. */
+/* The order to read the room in: its status, the match, the players, then the room's own
+   controls, which are rarely needed once it is open. With no room, making one comes first. */
 .desk-main > .lobby-status { order: 0; }
-.desk-main > .lobby-queue { order: 1; }
-.desk-main > .lobby-host-controls { order: 2; }
-.desk-main > .lobby-players { order: 3; }
-.desk-main > .lobby-referees { order: 4; }
-.desk-main > .lobby-lifecycle { order: 5; }
-.desk-main > .lobby-moderation { order: 6; }
+.desk-main > .status-note { order: 0; }
+.desk-main > .lobby-host-controls { order: 1; }
+.desk-main > .lobby-players { order: 2; }
+.desk-main > .lobby-lifecycle { order: 3; }
+.desk.no-room .desk-main > .lobby-lifecycle { order: 1; }
 
 .desk-side {
-    position: sticky;
-    top: 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
     min-width: 0;
+}
+
+/* One plain sentence under the status when the lobby is not simply open. */
+.status-note {
+    margin: 0;
+    padding: 12px 16px;
+    border-radius: 10px;
+    background: var(--surface-raised);
+    border: 1px solid var(--hairline);
+    color: var(--text-2);
+    font-size: 14px;
+}
+
+.status-note.problem {
+    border-color: var(--negative);
+    color: var(--text);
+}
+
+.page > .status-note {
+    margin-bottom: 16px;
+}
+
+.lede,
+.hint {
+    color: var(--text-3);
+    font-size: 13px;
+}
+
+.hint {
+    margin-top: 8px;
+}
+
+.page section > .lede {
+    margin: -8px 0 12px;
 }
 
 .desk + section {
@@ -540,56 +575,6 @@ tr:last-child td {
 
 /* The queue: the rotation as a numbered track, the current host leading in the accent. */
 
-.lobby-queue ol {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    counter-reset: turn;
-}
-
-.lobby-queue li {
-    counter-increment: turn;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px 12px 4px 4px;
-    border: 1px solid var(--hairline);
-    border-radius: 10px;
-    background: var(--surface-raised);
-    font-size: 14px;
-}
-
-.lobby-queue li::before {
-    content: counter(turn);
-    display: inline-grid;
-    place-items: center;
-    min-width: 24px;
-    height: 24px;
-    padding: 0 8px;
-    border-radius: 6px;
-    background: var(--page);
-    color: var(--text-3);
-    font-family: var(--mono);
-    font-size: 12px;
-}
-
-.lobby-queue li.host {
-    background: var(--accent-soft);
-    border-color: var(--accent);
-    font-weight: 500;
-}
-
-.lobby-queue li.host::before {
-    background: var(--accent);
-    color: var(--on-accent);
-}
-
-.lobby-queue li.host .tag {
-    color: var(--accent-ink);
-}
-
-/* Host controls */
-
 .match-controls {
     display: flex;
     flex-wrap: wrap;
@@ -601,47 +586,131 @@ tr:last-child td {
     flex: 1 1 280px;
 }
 
-.queue-editor {
-    margin-top: 16px;
-    counter-reset: turn;
+/* Players: one row each, in host-queue order, with everything that can be done to them. */
+
+.lobby-players .count {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text-3);
 }
 
-.queue-editor li {
-    counter-increment: turn;
-    display: flex;
+.roster li {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) auto auto;
     align-items: center;
-    gap: 8px;
-    padding: 6px 0;
+    gap: 4px 12px;
+    min-height: 44px;
+    padding: 8px 0;
     border-top: 1px solid var(--hairline);
 }
 
-.queue-editor li::before {
-    content: counter(turn);
-    width: 24px;
-    color: var(--text-3);
-    font-family: var(--mono);
-    font-size: 12px;
+.roster li:first-child {
+    border-top: 0;
 }
 
-.queue-editor .name,
+.roster .pos {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: var(--surface-high);
+    color: var(--text-2);
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 24px;
+    text-align: center;
+}
+
+.roster li.host .pos {
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: 700;
+}
+
+.roster .who {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    min-width: 0;
+}
+
+.roster .name,
 .lobby-moderation .name {
-    flex: 1;
     min-width: 0;
     overflow-wrap: anywhere;
 }
 
-.queue-editor button,
+.roster .name {
+    font-weight: 600;
+}
+
+.badge {
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--surface-high);
+    color: var(--text-2);
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.badge.host {
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+}
+
+.badge.denied {
+    color: var(--text-3);
+}
+
+.roster .where {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-3);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.roster .slot {
+    font-family: var(--mono);
+}
+
+.roster .team.blue {
+    color: #66ccff;
+}
+
+.roster .team.red {
+    color: var(--negative);
+}
+
+.roster .actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 4px;
+}
+
+.roster .actions button,
 .lobby-moderation li button {
-    padding: 2px 12px;
+    padding: 2px 10px;
     font-size: 13px;
 }
 
-/* Players */
+.roster .actions .up,
+.roster .actions .down {
+    min-width: 32px;
+    padding: 2px 8px;
+}
 
-.lobby-players td:first-child {
-    width: 48px;
-    font-family: var(--mono);
+.lobby-players .referees {
+    margin-top: 12px;
     color: var(--text-3);
+    font-size: 13px;
+}
+
+.lobby-moderation .name {
+    flex: 1;
 }
 
 /* Player states as lazer's pills. */
@@ -677,7 +746,8 @@ tr:last-child td {
     margin-bottom: 4px;
 }
 
-.lobby-lifecycle .notice {
+.lobby-lifecycle .notice,
+.lobby-rules > .notice {
     padding: 12px 16px;
     border-radius: 10px;
     background: var(--surface-raised);
@@ -693,7 +763,7 @@ tr:last-child td {
 /* Moderation */
 
 .lobby-moderation ul {
-    margin-bottom: 16px;
+    margin-bottom: 12px;
 }
 
 .lobby-moderation li {
@@ -714,8 +784,32 @@ tr:last-child td {
 .page .desk-side section.lobby-chat {
     display: flex;
     flex-direction: column;
-    max-height: calc(100vh - 96px);
+    height: clamp(320px, 58vh, 560px);
     padding: 0;
+}
+
+/* A reversed column keeps the scroller at its end, the newest line, as lines arrive. */
+.chat-scroll {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column-reverse;
+    overflow-y: auto;
+}
+
+.lobby-chat > .empty {
+    flex: 1;
+}
+
+/* With no room there is no chat to make room for. */
+.page .desk.no-room .desk-side section.lobby-chat {
+    height: auto;
+}
+
+.lobby-chat > .hint {
+    margin: 0;
+    padding: 12px 20px 16px;
+    border-top: 1px solid var(--hairline);
 }
 
 .lobby-chat > h2 {
@@ -731,9 +825,6 @@ tr:last-child td {
 }
 
 .chat-lines {
-    flex: 1;
-    min-height: 120px;
-    overflow-y: auto;
     padding: 0 20px 12px;
     font-size: 14px;
     line-height: 20px;
@@ -791,7 +882,8 @@ tr:last-child td {
 
 form.rules {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    /* min() lets a column shrink below 340px on a phone instead of spilling out of the card. */
+    grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
     gap: 16px;
     margin: 0;
     align-items: start;
@@ -1047,10 +1139,51 @@ input.switch:checked::before {
     color: var(--on-accent);
 }
 
+/* The save bar stays at the bottom of the window while the long form scrolls under it. */
 .form-actions {
     grid-column: 1 / -1;
+    position: sticky;
+    bottom: 12px;
+    z-index: 2;
     display: flex;
-    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    padding: 12px 16px;
+    border-radius: 12px;
+    background: var(--surface-high);
+    border: 1px solid var(--hairline-strong);
+    box-shadow: var(--shadow);
+}
+
+.form-actions .save-state {
+    margin: 0 auto 0 0;
+    color: var(--text-2);
+    font-weight: 700;
+}
+
+.form-actions[data-dirty=yes] .save-state {
+    color: var(--accent-ink);
+}
+
+.form-actions .message {
+    flex: 1 1 100%;
+    order: -1;
+    margin: 0;
+    color: var(--text);
+}
+
+.slider .number input {
+    width: 76px;
+}
+
+/* Room for the number box without squeezing the slider to a stub. */
+.slider:has(.number) {
+    flex-basis: 300px;
+}
+
+.slider .number .unit {
+    min-width: 48px;
 }
 
 /* History */
@@ -1336,7 +1469,7 @@ section + .match-list {
     }
 
     .page .desk-side section.lobby-chat {
-        max-height: 70vh;
+        height: clamp(280px, 60vh, 480px);
     }
 
     .stats-grid {
@@ -1358,8 +1491,23 @@ section + .match-list {
     }
 
     .topbar-inner {
-        gap: 12px;
+        gap: 8px;
         padding: 0 16px;
+    }
+
+    /* Three pages and the sign-out button fit a phone on one line. */
+    .wordmark,
+    .account button {
+        white-space: nowrap;
+    }
+
+    .site {
+        gap: 0;
+    }
+
+    .site a {
+        padding-left: 8px;
+        padding-right: 8px;
     }
 
     .account .who {
@@ -1390,10 +1538,21 @@ section + .match-list {
 
     .lobby-chat > h2,
     .lobby-chat > p,
+    .lobby-chat > .hint,
     .chat-lines,
     .lobby-chat form.say {
         padding-left: 16px;
         padding-right: 16px;
+    }
+
+    /* On a phone the buttons for a player go on their own line under the name. */
+    .roster li {
+        grid-template-columns: 24px minmax(0, 1fr) auto;
+    }
+
+    .roster .actions {
+        grid-column: 2 / -1;
+        justify-content: flex-start;
     }
 
     .stats-grid {

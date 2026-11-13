@@ -78,12 +78,110 @@ public sealed class LobbyViewTests : IAsyncDisposable
         Assert.Contains("5* host rotate (#53084403)", html, StringComparison.Ordinal);
         Assert.Contains("A match is being played.", html, StringComparison.Ordinal);
         Assert.Contains("href=\"https://osu.ppy.sh/b/4242\"", html, StringComparison.Ordinal);
-        Assert.Contains("Players (2/16)", html, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"count\">2 / 16</span>", html, StringComparison.Ordinal);
         Assert.Contains("href=\"https://osu.ppy.sh/users/11\"", html, StringComparison.Ordinal);
-        Assert.Contains("<td>Blue</td>", html, StringComparison.Ordinal);
-        Assert.Contains("<td><span class=\"state playing\">playing</span></td>", html, StringComparison.Ordinal);
-        Assert.Matches("<li class=\"host\">\\s*p1", html);
+        Assert.Contains("<span class=\"team blue\">Blue</span>", html, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"state playing\">Playing</span>", html, StringComparison.Ordinal);
+        Assert.Equal(1, html.Split("<li class=\"host\">").Length - 1);
+        Assert.Contains("<span class=\"badge host\">Host</span>", html, StringComparison.Ordinal);
         Assert.True(html.IndexOf("p1", StringComparison.Ordinal) < html.IndexOf("p 2", StringComparison.Ordinal));
+    }
+
+    // The same players used to be listed four times: the queue, the queue editor, the players
+    // table and moderation. Now each is listed once, with every action on that row.
+    [Fact]
+    public async Task Each_player_is_listed_once_with_every_action_on_their_row()
+    {
+        var html = await RenderAsync(Snapshot(
+            players:
+            [
+                new("p1", 11, 1, Team.None, MatchStatus.InLobby),
+                new("p2", 12, 2, Team.None, MatchStatus.InLobby),
+                new("p3", 13, 3, Team.None, MatchStatus.InLobby),
+                new("banned", 14, 4, Team.None, MatchStatus.InLobby),
+            ],
+            queue: ["p1", "p2", "p3"]) with { Denied = ["banned"] });
+
+        Assert.Equal(4, html.Split("<li").Length - 1);
+        Assert.Equal(1, html.Split(">p2</a>").Length - 1);
+
+        // The first cannot move up, the last cannot move down, and the host is not offered host.
+        Assert.Matches("aria-label=\"Move p1 up\"[^>]*disabled|disabled[^>]*aria-label=\"Move p1 up\"", html);
+        Assert.Matches("aria-label=\"Move p3 down\"[^>]*disabled|disabled[^>]*aria-label=\"Move p3 down\"", html);
+        Assert.Equal(2, html.Split("Give host").Length - 1);
+        Assert.Equal(4, html.Split(">Kick<").Length - 1);
+
+        // Someone who is never given host is in the room but not in the queue.
+        Assert.Equal(3, html.Split("Never host</button>").Length - 1);
+        Assert.Equal(1, html.Split("Allow host</button>").Length - 1);
+        Assert.DoesNotContain("aria-label=\"Move banned up\"", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_roster_is_the_queue_in_order_then_everyone_else_by_slot()
+    {
+        var rows = PlayerRoster.Rows(Snapshot(
+            players:
+            [
+                new("late", null, 9, Team.None, MatchStatus.InLobby),
+                new("b", null, 2, Team.None, MatchStatus.InLobby),
+                new("a", null, 1, Team.None, MatchStatus.InLobby),
+                new("early", null, 3, Team.None, MatchStatus.InLobby),
+            ],
+            host: "b",
+            queue: ["b", "a"],
+            referees: ["a"]) with { Denied = ["late"] });
+
+        Assert.Equal(["b", "a", "early", "late"], rows.Select(r => r.Name));
+        Assert.Equal([1, 2, null, null], rows.Select(r => r.Position));
+        Assert.Equal([true, false, false, false], rows.Select(r => r.IsHost));
+        Assert.Equal([false, true, false, false], rows.Select(r => r.IsReferee));
+        Assert.Equal([false, false, false, true], rows.Select(r => r.IsDenied));
+    }
+
+    [Fact]
+    public async Task The_player_count_is_out_of_the_kept_room_size()
+    {
+        var snapshot = Snapshot();
+        Assert.Equal(16, PlayerRoster.Capacity(snapshot));
+
+        var kept = snapshot with { Settings = snapshot.Settings with { Keeping = new RoomKeeping { Size = 8 } } };
+        Assert.Equal(8, PlayerRoster.Capacity(kept));
+        Assert.Contains("<span class=\"count\">2 / 8</span>", await RenderAsync(kept), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Players_cannot_be_acted_on_while_the_bot_is_out_of_the_room()
+    {
+        var html = await RenderAsync(Snapshot(status: LobbyStatus.Reconnecting, connected: false));
+        Assert.Contains("p1", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<button", html, StringComparison.Ordinal);
+        Assert.Contains("Bancho dropped the connection.", html, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(LobbyStatus.Connecting, "Connecting to Bancho.")]
+    [InlineData(LobbyStatus.Creating, "Asking Bancho for a new room.")]
+    [InlineData(LobbyStatus.Rejoining, "Joining the room.")]
+    [InlineData(LobbyStatus.Syncing, "Reading who is in the room.")]
+    [InlineData(LobbyStatus.Reconnecting, "Bancho dropped the connection.")]
+    [InlineData(LobbyStatus.Closing, "Closing the room.")]
+    public void Every_status_but_open_is_explained_in_a_sentence(LobbyStatus status, string expected)
+    {
+        Assert.StartsWith(expected, LobbyView.StatusHelp(Snapshot(status: status)), StringComparison.Ordinal);
+        Assert.Null(LobbyView.StatusHelp(Snapshot()));
+        Assert.Null(LobbyView.StatusHelp(null));
+    }
+
+    [Fact]
+    public async Task A_bot_that_was_never_given_a_login_says_so_instead_of_a_status_hint()
+    {
+        Runtime.Problem = LobbyHostService.NotConfigured;
+        var html = await RenderAsync(Snapshot(status: LobbyStatus.Idle, connected: false, roomId: null, title: null, players: [], host: null, queue: []));
+
+        Assert.Contains("role=\"alert\"", html, StringComparison.Ordinal);
+        Assert.Contains("The bot has no Bancho login", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("You can create a room now", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -94,10 +192,12 @@ public sealed class LobbyViewTests : IAsyncDisposable
         Assert.Contains("Lobby status: <strong>Idle</strong>", html, StringComparison.Ordinal);
         Assert.Contains("Bancho: <strong>not connected</strong>", html, StringComparison.Ordinal);
         Assert.Contains("No room open.", html, StringComparison.Ordinal);
-        Assert.Contains("Nobody is queued.", html, StringComparison.Ordinal);
-        Assert.Contains("The room is empty.", html, StringComparison.Ordinal);
-        Assert.Contains("Waiting for the host.", html, StringComparison.Ordinal);
+        Assert.Contains("The bot is not connected to Bancho yet.", html, StringComparison.Ordinal);
         Assert.DoesNotContain("osu.ppy.sh/b/", html, StringComparison.Ordinal);
+
+        // With no room there is no host to wait for and no player list to show.
+        Assert.DoesNotContain("Waiting for the host.", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("lobby-players", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -116,7 +216,7 @@ public sealed class LobbyViewTests : IAsyncDisposable
         Assert.Contains("Closing once everyone has left.", html, StringComparison.Ordinal);
         Assert.Contains("creator, p_2", html, StringComparison.Ordinal);
         Assert.Contains("p 2", html, StringComparison.Ordinal);
-        Assert.Contains("(referee)", html, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"badge\">Referee</span>", html, StringComparison.Ordinal);
     }
 
     [Fact]

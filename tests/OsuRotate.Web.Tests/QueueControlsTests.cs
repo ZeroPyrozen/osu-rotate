@@ -279,17 +279,16 @@ public class QueueControlsTests
                 (await _renderer.RenderComponentAsync<QueueControls>(ParameterView.FromDictionary(new Dictionary<string, object?> { ["Snapshot"] = snapshot }))).ToHtmlString());
 
         [Fact]
-        public async Task Between_matches_it_offers_start_skip_and_the_queue_editor()
+        public async Task Between_matches_it_offers_start_and_skip()
         {
             var html = await RenderAsync(Snapshot());
             Assert.Contains("Start match", html, StringComparison.Ordinal);
             Assert.Contains("Skip the host", html, StringComparison.Ordinal);
             Assert.DoesNotContain("Abort the match", html, StringComparison.Ordinal);
+            Assert.Contains("Leave it empty to start now.", html, StringComparison.Ordinal);
 
-            // The first cannot move up, the last cannot move down, and the host is not offered host.
-            Assert.Matches("aria-label=\"Move p1 up\"[^>]*disabled|disabled[^>]*aria-label=\"Move p1 up\"", html);
-            Assert.Matches("aria-label=\"Move p3 down\"[^>]*disabled|disabled[^>]*aria-label=\"Move p3 down\"", html);
-            Assert.Equal(2, html.Split("Give host").Length - 1);
+            // Moving players in the queue is on each player's row in the player list now.
+            Assert.DoesNotContain("Give host", html, StringComparison.Ordinal);
         }
 
         [Fact]

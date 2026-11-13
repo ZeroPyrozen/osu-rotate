@@ -8,15 +8,21 @@
 @if (_form is not null)
 {
     <section class="lobby-rules" aria-label="Rules">
-        <h2>Rules</h2>
+        @if (_changedElsewhere)
+        {
+            <p class="notice" role="status">
+                The rules were changed in the lobby while you were editing, by a chat command or from another tab.
+                Saving replaces them with what is on this page. Discard your changes to load the lobby's rules instead.
+            </p>
+        }
         <form class="rules" @onsubmit="SaveAsync">
             <fieldset class="settings-section">
                 <legend>Map regulation</legend>
                 <ToggleRow Label="Check maps" Hint="Reject picks outside these rules" @bind-Value="_form.RegulationEnabled" />
                 <TilePicker TValue="GameMode" Label="Game mode" Hint="Maps in other modes are rejected" Items="GameModes" Columns="4" Compact="true" @bind-Value="_form.Mode" />
                 <ToggleRow Label="Allow converts" Hint="osu! maps played in this mode" @bind-Value="_form.AllowConvert" />
-                <SliderRow Label="Lowest star rating" Min="0" Max="10" Step="0.01" Format="Stars" Zero="No limit" @bind-Value="_form.StarMin" />
-                <SliderRow Label="Highest star rating" Min="0" Max="10" Step="0.01" Format="Stars" Zero="No limit" @bind-Value="_form.StarMax" />
+                <SliderRow Label="Lowest star rating" Hint="0 for no limit" Min="0" Max="10" Step="0.01" Exact="true" Unit="★" Zero="No limit" @bind-Value="_form.StarMin" />
+                <SliderRow Label="Highest star rating" Hint="0 for no limit" Min="0" Max="10" Step="0.01" Exact="true" Unit="★" Zero="No limit" @bind-Value="_form.StarMax" />
                 <NumberRow Label="Shortest length" Hint="0 for no limit" Unit="s" Min="0" @bind-Value="_form.LengthMinSeconds" />
                 <NumberRow Label="Longest length" Hint="0 for no limit" Unit="s" Min="0" @bind-Value="_form.LengthMaxSeconds" />
                 <NumberRow Label="Rejected picks before losing the turn" Hint="0 for no limit" Min="0" @bind-Value="_form.ViolationsAllowed" />
@@ -98,16 +104,18 @@
                 <NumberRow Label="Say it every" Hint="0 turns it off" Unit="s" Min="0" @bind-Value="_form.InfoAnnouncementIntervalSeconds" />
             </fieldset>
 
-            <div class="form-actions">
-                <button type="submit" disabled="@_busy">Save rules</button>
-                <button type="button" class="reset" disabled="@_busy" @onclick="Reset">Reset</button>
+            @* Stays at the bottom of the window while the form scrolls, so saving never means
+               scrolling to the end of the page, and it says whether there is anything to save. *@
+            <div class="form-actions" data-dirty="@(Dirty ? "yes" : "no")">
+                <p class="save-state" role="status">@SaveState</p>
+                @if (_message is not null)
+                {
+                    <p class="message problem" role="alert">@_message</p>
+                }
+                <button type="button" class="reset" disabled="@(_busy || !(Dirty || _changedElsewhere))" @onclick="Reset">Discard changes</button>
+                <button type="submit" disabled="@(_busy || !Dirty)">Save rules</button>
             </div>
         </form>
-
-        @if (_message is not null)
-        {
-            <p class="message" role="status">@_message</p>
-        }
     </section>
 }
 
@@ -138,7 +146,6 @@
         new(PasswordKeeping.Set, "Password"),
     ];
 
-    private static string Stars(double value) => value.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + "★";
 
     private static string Percent(double value) => value.ToString("0%", System.Globalization.CultureInfo.InvariantCulture);
 
@@ -158,21 +165,55 @@
     }
 
     private RuleForm? _form;
+
+    // The form as it was loaded or last saved, to tell whether anything on the page has changed.
+    private RuleForm? _pristine;
+
+    // The lobby's rules the form was filled from, to notice when they change underneath it.
+    private LobbySettings? _loaded;
     private RuleActions? _actions;
     private string? _message;
     private bool _busy;
+    private bool _saved;
+    private bool _changedElsewhere;
     private bool _hasPassword;
+
+    private bool Dirty => _form is not null && _pristine is not null && !_form.SameAs(_pristine);
+
+    private string SaveState => _busy ? "Saving" : Dirty ? "Unsaved changes" : _saved ? "Saved" : "No changes";
 
     [Parameter]
     public LobbySnapshot? Snapshot { get; set; }
 
     private RuleActions Actions => _actions ??= new RuleActions(Runtime);
 
+    // The form used to be filled once and never again, so rules changed in the lobby (the owner's
+    // *regulation in chat, or another tab) were silently put back by the next save here. Now an
+    // untouched form follows the lobby, and one with edits says the rules moved under it.
     protected override void OnParametersSet()
     {
-        if (_form is null && Snapshot is not null)
+        if (Snapshot is null)
+        {
+            return;
+        }
+
+        if (_form is null)
         {
             Reset();
+        }
+        else if (Snapshot.Settings != _loaded)
+        {
+            if (Dirty)
+            {
+                _loaded = Snapshot.Settings;
+                _changedElsewhere = true;
+            }
+            else
+            {
+                var saved = _saved;
+                Reset();
+                _saved = saved;
+            }
         }
     }
 
@@ -181,8 +222,12 @@
         if (Snapshot is not null)
         {
             _form = RuleForm.From(Snapshot.Settings);
+            _pristine = _form.Clone();
+            _loaded = Snapshot.Settings;
             _hasPassword = Snapshot.Settings.Keeping.Password is { Length: > 0 };
             _message = null;
+            _saved = false;
+            _changedElsewhere = false;
         }
     }
 
@@ -197,11 +242,14 @@
         _message = null;
         try
         {
-            _message = await Actions.SaveAsync(_form) ?? "Saved.";
-            if (_message == "Saved.")
+            _message = await Actions.SaveAsync(_form);
+            _saved = _message is null;
+            if (_saved)
             {
                 _hasPassword |= _form.Password == PasswordKeeping.Set;
                 _form.NewPassword = null;
+                _pristine = _form.Clone();
+                _changedElsewhere = false;
             }
         }
         finally

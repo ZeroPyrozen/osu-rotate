@@ -1,5 +1,7 @@
 @using System.Globalization
-@* A slider with its value shown beside it, for values with a natural range (star rating, shares). *@
+@* A slider with its value beside it, for values with a natural range (star rating, shares).
+   With Exact, the value beside it is a box to type in: dragging a slider to exactly 5.99 out of
+   a thousand steps is luck, and star limits are usually exact numbers. *@
 
 <label class="form-row slider-row">
     <span class="form-text">
@@ -11,7 +13,17 @@
     </span>
     <span class="slider">
         <input type="range" min="@Number(Min)" max="@Number(Max)" step="@Number(Step)" value="@Number(Value)" @oninput="OnInput" />
-        <output class="slider-value">@Display(Value)</output>
+        @if (Exact)
+        {
+            <span class="number">
+                <input type="number" min="@Number(Min)" max="@Number(Max)" step="@Number(Step)" value="@Number(Value)" aria-label="@Label" @onchange="OnInput" />
+                <span class="unit">@(Value == 0 && Zero is not null ? Zero : Unit)</span>
+            </span>
+        }
+        else
+        {
+            <output class="slider-value">@Display(Value)</output>
+        }
     </span>
 </label>
 
@@ -37,19 +49,27 @@
     [Parameter]
     public EventCallback<double> ValueChanged { get; set; }
 
-    // How the value reads, for example "5.5*" or "50%"; Zero is shown for 0 when given.
+    // How the value reads, for example "50%"; Zero is shown for 0 when given.
     [Parameter]
     public Func<double, string> Format { get; set; } = v => v.ToString("0.##", CultureInfo.InvariantCulture);
 
     [Parameter]
     public string? Zero { get; set; }
 
+    // Show a number box beside the slider, with Unit after it.
+    [Parameter]
+    public bool Exact { get; set; }
+
+    [Parameter]
+    public string? Unit { get; set; }
+
     private string Display(double value) => value == 0 && Zero is not null ? Zero : Format(value);
 
     private static string Number(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
 
+    // A typed value outside the range is brought back into it rather than refused without a word.
     private Task OnInput(ChangeEventArgs args) =>
-        double.TryParse(args.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
-            ? ValueChanged.InvokeAsync(value)
+        double.TryParse(args.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && double.IsFinite(value)
+            ? ValueChanged.InvokeAsync(Math.Clamp(value, Min, Max))
             : Task.CompletedTask;
 }

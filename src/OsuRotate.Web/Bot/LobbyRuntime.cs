@@ -20,6 +20,10 @@ public sealed class LobbyRuntime : ILobbyStatusReader
 
     public LobbyActor? Actor => Volatile.Read(ref _actor);
 
+    // Something about how the bot is set up that stops it from working, for the dashboard to show:
+    // the lobby's own status cannot say that the bot was never given a Bancho login.
+    public string? Problem { get; internal set; }
+
     public LobbySnapshot? Snapshot => Actor?.Snapshot;
 
     public LobbyStatus Current => Snapshot?.Status ?? LobbyStatus.Idle;
