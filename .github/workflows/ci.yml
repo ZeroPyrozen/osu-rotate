@@ -31,12 +31,14 @@ jobs:
       - name: Test
         run: dotnet test --solution OsuRotate.slnx --configuration Release --no-build
 
-      - name: Test the deploy script
-        run: bash deploy/tests/pi-install.test.sh
+      - name: Test the deploy scripts
+        run: |
+          bash deploy/tests/pi-install.test.sh
+          bash deploy/tests/tailscale-node.test.sh
 
       # Again on Debian 13, the Pi's OS, in case its tools differ from Ubuntu's.
-      - name: Test the deploy script on Debian 13
-        run: docker run --rm -v "$PWD:/src:ro" -w /src debian:trixie bash deploy/tests/pi-install.test.sh
+      - name: Test the deploy scripts on Debian 13
+        run: docker run --rm -v "$PWD:/src:ro" -w /src debian:trixie bash -c 'bash deploy/tests/pi-install.test.sh && bash deploy/tests/tailscale-node.test.sh'
 
       - name: Publish for Raspberry Pi (linux-arm64)
         run: dotnet publish src/OsuRotate.Web/OsuRotate.Web.csproj --configuration Release --runtime linux-arm64 --self-contained --output ${{ runner.temp }}/osu-rotate-linux-arm64

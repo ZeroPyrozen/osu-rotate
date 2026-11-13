@@ -69,7 +69,7 @@ public static class Hardening
 
         if (PublicHost(app.Configuration) is null && !app.Environment.IsDevelopment())
         {
-            app.Logger.LogWarning("Dashboard__Host is not set, so the dashboard only answers on localhost. Set it to the Pi's Tailscale name (<machine>.<tailnet>.ts.net).");
+            app.Logger.LogWarning("Dashboard__Host is not set, so the dashboard only answers on localhost. Set it to the dashboard's Tailscale name (osu-rotate.<tailnet>.ts.net).");
         }
 
         if (!app.Environment.IsDevelopment())

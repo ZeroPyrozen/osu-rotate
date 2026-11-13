@@ -25,7 +25,9 @@ Issues marked `ready-for-human` are the owner's steps; `ready-for-agent` ones an
 - Kestrel stays on `127.0.0.1:5180`; only `tailscale serve` on the Pi reaches it, so forwarded
   headers are trusted from loopback only (phase 5, issue 08).
 - The dashboard is on the tailnet only: no Cloudflare Tunnel, no Tailscale Funnel (ADR 0001).
-- `Dashboard__Host` and the OAuth callback must match the Pi's `ts.net` name and port.
+- The dashboard has its own Tailscale node, `osu-rotate`, next to the Pi's existing one, so its
+  address is `https://osu-rotate.<tailnet>.ts.net` (ADR 0001, `deploy/tailscale-node.sh`).
+- `Dashboard__Host` and the OAuth callback must match that name.
 - The tailnet and machine names stay out of the repo, like the Pi's username.
 - Settings and secrets live in `/etc/osu-rotate/secrets.env`, which deploys never overwrite.
 - One lobby, open 24/7, on the owner's own account. No automatic closing.
@@ -45,8 +47,6 @@ Issues marked `ready-for-human` are the owner's steps; `ready-for-agent` ones an
 
 ## Open
 
-- The dashboard goes on HTTPS port 8443 of the Pi's Tailscale name: 443 already serves another
-  site there, with Funnel on. 8443 gets no Funnel (issue 03).
 - The phases are on stacked local branches (`phase-1-foundation` to `phase-5-dashboard`) and
   nothing is pushed; `main` is still the initial commit. Issue 01 settles how they land.
 - `BanchoIrcTransportTests.Stopping_ends_the_event_stream` failed once in phase 5 and not since.
