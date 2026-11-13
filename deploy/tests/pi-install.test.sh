@@ -4,11 +4,22 @@
 #
 #   bash deploy/tests/pi-install.test.sh
 #
-# Needs Linux, because releases are switched with real symbolic links.
+# Needs Linux (or WSL), because releases are switched with real symbolic links. Elsewhere it stops
+# with exit code 2. CI runs it on Ubuntu and in a Debian 13 container on every push.
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
+
+# Git Bash on Windows "links" by copying, so every release switch would look wrong. Stop with a
+# reason instead of a page of failures. Exit 2: not a pass, but not a broken script either.
+ln -s "$work" "$work/link-check" 2>/dev/null
+if [[ ! -L $work/link-check ]]; then
+    echo "SKIP  this shell can't make symbolic links (Git Bash on Windows?)." >&2
+    echo "      Run it under WSL or Linux; CI runs it on every push." >&2
+    exit 2
+fi
+rm -f "$work/link-check"
 
 # Everything above the root check is definitions; leave out the part that runs a command.
 sed '/^\[\[ \$EUID -eq 0 \]\]/,$d' "$here/../pi-install.sh" > "$work/functions.sh"

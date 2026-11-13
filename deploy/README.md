@@ -17,6 +17,10 @@ Each deploy goes into a new folder under `/opt/osu-rotate/releases/`, then `/opt
 is switched to it and `/healthz` is checked. If that fails, the previous release is restored. The
 last 3 releases are kept.
 
+`deploy/tests/pi-install.test.sh` tests the release switch, health check, rollback and pruning
+without a Pi. It needs Linux or WSL, since it uses real symbolic links; in Git Bash on Windows it
+stops with exit code 2 and says so. CI runs it on Ubuntu and on Debian 13 for every push.
+
 ## Day-to-day
 
 | Task | Command |

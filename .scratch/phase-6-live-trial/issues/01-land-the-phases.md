@@ -1,6 +1,6 @@
 # Land phases 1 to 5
 
-Status: in-progress
+Status: done
 
 The work is on five stacked local branches, and `main` is still the initial commit. Decide how it
 lands: one pull request per phase into `main` in order, or one pull request for the whole stack.
@@ -21,3 +21,6 @@ Done when `main` holds phases 1 to 5, the history scan is clean, and the full te
 History scan, all branches: no usernames, LAN addresses or secrets in any file. The only matches
 are the README's placeholder `pi@192.168.1.50` and the license's copyright name. The initial commit
 (already on GitHub) has a different author email; it stays as it is.
+
+2026-11-12: pull request ZeroPyrozen/osu-rotate#1 merged into `main`. CI on the pull request
+passed every step on Linux: build, all tests, the deploy script test and the linux-arm64 publish.
