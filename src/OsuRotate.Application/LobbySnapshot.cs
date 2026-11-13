@@ -19,7 +19,8 @@ public sealed record LobbySnapshot(
     int BeatmapId,
     IReadOnlyList<string> Denied,
     IReadOnlyList<string> Referees,
-    LobbySettings Settings)
+    LobbySettings Settings,
+    string? Notice = null)
 {
     // Compared by content, so the actor only announces snapshots that changed.
     public bool Equals(LobbySnapshot? other) =>
@@ -37,7 +38,8 @@ public sealed record LobbySnapshot(
         && BeatmapId == other.BeatmapId
         && Denied.SequenceEqual(other.Denied)
         && Referees.SequenceEqual(other.Referees)
-        && Settings == other.Settings;
+        && Settings == other.Settings
+        && Notice == other.Notice;
 
     public override int GetHashCode() => HashCode.Combine(Status, RoomId, Host, Queue.Count, Players.Count, IsMatching, BeatmapId);
 
@@ -58,6 +60,7 @@ public sealed record LobbySnapshot(
             room.BeatmapId,
             [.. engine.DenyList.Keys.Order(StringComparer.Ordinal)],
             [.. room.Referees.Order(StringComparer.Ordinal)],
-            engine.Settings);
+            engine.Settings,
+            lifecycle.Notice);
     }
 }

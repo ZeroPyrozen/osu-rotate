@@ -486,7 +486,33 @@ public class LobbyKeeperTests
         {
             var lobby = Create(new RoomKeeping { Mode = new KeptMode(TeamMode.TagCoop, ScoreMode.Combo) });
             lobby.Feed(new RoomCreated(1, "room"));
-            Assert.Equal([new SetTeamAndScoreMode(1, 2)], lobby.Sent);
+            Assert.Equal([new SetTeamAndScoreMode(1, 2), new SetPassword(null)], lobby.Sent);
+        }
+
+        // Bancho gives an !mp make room a random password. A new room is opened unless the rules
+        // keep a password; a room the bot rejoins keeps whatever it has.
+        [Fact]
+        public void A_new_room_is_opened_when_no_password_is_kept()
+        {
+            var lobby = Create(new RoomKeeping());
+            lobby.Feed(new RoomCreated(1, "room"));
+            Assert.Equal([new SetPassword(null)], lobby.Sent);
+        }
+
+        [Fact]
+        public void A_new_room_gets_the_kept_password_instead()
+        {
+            var lobby = Create(new RoomKeeping { Password = "secret" });
+            lobby.Feed(new RoomCreated(1, "room"));
+            Assert.Equal([new SetPassword("secret")], lobby.Sent);
+        }
+
+        [Fact]
+        public void A_rejoined_room_keeps_its_password_when_none_is_kept()
+        {
+            var lobby = Create(new RoomKeeping());
+            lobby.Feed(new RoomJoined(1));
+            Assert.DoesNotContain(lobby.Sent, c => c is SetPassword);
         }
 
         [Fact]

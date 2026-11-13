@@ -133,6 +133,17 @@ public sealed partial class LobbyEngine
         }
     }
 
+    // !mp make rooms start with a random password from Bancho. Unless the rules keep one, the new
+    // room is opened, as osu-ahr did; "not kept" still leaves a password alone after that, and a
+    // room the bot rejoins is never changed here.
+    private void KeeperOnRoomCreated()
+    {
+        if (Keeping.Password is null)
+        {
+            _output.Add(new SetPassword(null));
+        }
+    }
+
     private void FixPassword()
     {
         if (Keeping.Password is { } password)

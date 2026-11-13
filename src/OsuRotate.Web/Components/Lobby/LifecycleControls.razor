@@ -4,6 +4,10 @@
 
 <section class="lobby-lifecycle" aria-label="Lobby controls">
     <h2>Room</h2>
+    @if (Snapshot?.Notice is { } notice)
+    {
+        <p class="notice" role="status">@notice</p>
+    }
     @if (LifecycleActions.CanOpen(Snapshot))
     {
         <form class="create" @onsubmit="CreateAsync">
