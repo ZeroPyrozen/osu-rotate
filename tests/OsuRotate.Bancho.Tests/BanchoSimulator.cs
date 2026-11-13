@@ -32,6 +32,11 @@ internal sealed class BanchoSimulator : IAsyncDisposable
     public bool CreatedReplyBeforeJoin { get; set; }
     public bool RejectWithNumeric { get; set; }
 
+    // Answer !mp make as Bancho does for an account that already has its four rooms open.
+    public bool RoomLimitReached { get; set; }
+
+    public const string RoomLimitText = "You cannot create any more tournament matches. Please close any previous tournament matches you have open.";
+
     public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
     public int Connections => Volatile.Read(ref _connections);
     public IReadOnlyList<(DateTimeOffset At, string Line)> Received => [.. _received];
@@ -266,7 +271,14 @@ internal sealed class BanchoSimulator : IAsyncDisposable
     {
         if (target == "BanchoBot" && text.StartsWith("!mp make ", StringComparison.Ordinal))
         {
-            MakeRoom(text[9..]);
+            if (RoomLimitReached)
+            {
+                FromBot(Nick, RoomLimitText);
+            }
+            else
+            {
+                MakeRoom(text[9..]);
+            }
         }
         else if (target == "BanchoBot" && text.StartsWith("!stat ", StringComparison.Ordinal))
         {

@@ -9,6 +9,11 @@ public class BanchoParserTests
     public static TheoryData<string, LobbyEvent> Messages => new()
     {
         // Players
+        // Not from osu-ahr: the reply to !mp make when the account already has its four rooms open.
+        {
+            "You cannot create any more tournament matches. Please close any previous tournament matches you have open.",
+            new RoomCreateRefused("You cannot create any more tournament matches. Please close any previous tournament matches you have open.")
+        },
         { "Swgciai joined in slot 4.", new PlayerJoined("Swgciai", 4, Team.None) },
         { "Foet_Mnagyo joined in slot 1.", new PlayerJoined("Foet_Mnagyo", 1, Team.None) },
         { "- Cylcl joined in slot 5.", new PlayerJoined("- Cylcl", 5, Team.None) },

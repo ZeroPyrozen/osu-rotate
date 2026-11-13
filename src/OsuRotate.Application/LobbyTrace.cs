@@ -47,6 +47,7 @@ public static partial class LobbyTrace
         RoomCreated e => Invariant($"room {e.RoomId} created: \"{e.Title}\""),
         RoomJoined e => Invariant($"joined room {e.RoomId}"),
         RoomJoinFailed e => Invariant($"could not join room {e.RoomId}: {e.Reason}"),
+        RoomCreateRefused e => $"Bancho would not make a room: {e.Reason}",
         RoomClosed e => Invariant($"room {e.RoomId} closed"),
         RoomStateReceived e => Invariant(
             $"room state: {e.State.Players.Count} players, host {e.State.Players.FirstOrDefault(p => p.IsHost)?.Username ?? "none"}, map {e.State.BeatmapId}"),

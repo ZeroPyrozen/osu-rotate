@@ -211,6 +211,18 @@ public sealed class BanchoIrcTransportTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Reports_a_room_bancho_refuses_to_make()
+    {
+        _server.RoomLimitReached = true;
+        StartTransport();
+        await Next<TransportConnected>();
+
+        await Transport.SendAsync(new CreateRoom("test room"), default);
+
+        Assert.Equal(BanchoSimulator.RoomLimitText, (await Next<RoomCreateRefused>()).Reason);
+    }
+
+    [Fact]
     public async Task Joins_an_existing_room()
     {
         _server.AddRoom(555);

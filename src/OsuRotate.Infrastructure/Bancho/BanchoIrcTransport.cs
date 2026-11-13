@@ -365,6 +365,12 @@ public sealed class BanchoIrcTransport : ILobbyTransport, IDisposable
             {
                 HandleRoomCreated(created);
             }
+            else if (parsed is RoomCreateRefused)
+            {
+                // No room is coming, so the next channel joined is not the one that was asked for.
+                _awaitingCreatedRoom = false;
+                Emit(parsed);
+            }
             else if (parsed is not null)
             {
                 Emit(parsed);

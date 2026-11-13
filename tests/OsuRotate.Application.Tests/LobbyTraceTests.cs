@@ -81,6 +81,7 @@ public class LobbyTraceTests
         { new CountdownStarted(30), "countdown 30 s" },
         { new RoomCreated(123, "auto host"), "room 123 created: \"auto host\"" },
         { new RoomJoinFailed(123, "closed"), "could not join room 123: closed" },
+        { new RoomCreateRefused("too many rooms"), "Bancho would not make a room: too many rooms" },
         { new TransportDisconnected("timeout"), "disconnected from Bancho: timeout" },
         { new MatchHistoryRead([new SeenKick("x", DateTimeOffset.UnixEpoch)], 99), "match history read: 1 kicks, up to event 99" },
         {
