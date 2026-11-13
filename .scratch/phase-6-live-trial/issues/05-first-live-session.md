@@ -24,3 +24,13 @@ The agent reads the journal and a copy of the database the owner shares (never t
 and compares what happened with what the engine should have done.
 
 Done when every item is recorded as working, or has its own fix issue.
+
+## Comments
+
+2026-11-13: before the session, the journal only had errors, so most of the list above couldn't be
+checked afterwards. The owner chose to add a trace: `LobbyTrace` describes every input the lobby
+takes and every command it sends, and `LoggingLobbyDiagnostics` writes them at Information as
+"Lobby: ..." and "Bot: ...". Player chat becomes "chat from <name>" plus its `!command` word; the
+owner's own chat is only counted; the room password is never shown; countdown ticks are left out.
+The agent reads it with `journalctl -u osu-rotate` (the owner's user is in `adm`), no sudo needed.
+

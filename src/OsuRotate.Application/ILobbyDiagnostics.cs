@@ -16,10 +16,24 @@ public interface ILobbyDiagnostics
 
     // The lobby went on without saving; the next change tries again.
     void SaveFailed(Exception exception);
+
+    // The trace: every input the lobby takes (timer ticks aside) and every command it sends, in order.
+    // LobbyTrace turns them into journal lines without chat text.
+    void Received(LobbyInput input);
+
+    void Sending(LobbyCommand command);
 }
 
 public sealed class NoLobbyDiagnostics : ILobbyDiagnostics
 {
+    public void Received(LobbyInput input)
+    {
+    }
+
+    public void Sending(LobbyCommand command)
+    {
+    }
+
     public static NoLobbyDiagnostics Instance { get; } = new();
 
     public void InputFailed(LobbyInput input, Exception exception)

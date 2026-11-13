@@ -164,6 +164,7 @@ public sealed class LobbyActor
         }
 
         var input = envelope.Input!;
+        _diagnostics.Received(input);
         if (input is SayInLobby say)
         {
             Chat.Add(new ChatLine(_time.GetUtcNow(), _engine.Settings.OwnerName, say.Text, ChatSource.Owner));
@@ -173,7 +174,9 @@ public sealed class LobbyActor
 
         if (input is KickFromLobby kick)
         {
-            await SendAsync(new KickPlayer(kick.Name), cancellationToken).ConfigureAwait(false);
+            var command = new KickPlayer(kick.Name);
+            _diagnostics.Sending(command);
+            await SendAsync(command, cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -266,6 +269,7 @@ public sealed class LobbyActor
         await SaveMatchesAsync(cancellationToken).ConfigureAwait(false);
         foreach (var command in commands)
         {
+            _diagnostics.Sending(command);
             if (command is RecordMatch)
             {
                 continue;

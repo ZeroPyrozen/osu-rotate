@@ -3,7 +3,8 @@ using OsuRotate.Domain;
 
 namespace OsuRotate.Web.Bot;
 
-// The actor's failures, in the journal. Messages name types and ids, never chat text or secrets.
+// The actor's failures and its trace, in the journal. Failures name types and ids; the trace comes
+// from LobbyTrace, which leaves out chat text and the room password.
 internal sealed partial class LoggingLobbyDiagnostics(ILogger<LoggingLobbyDiagnostics> logger) : ILobbyDiagnostics
 {
     public void InputFailed(LobbyInput input, Exception exception) => LogInputFailed(logger, input.GetType().Name, exception);
@@ -25,6 +26,28 @@ internal sealed partial class LoggingLobbyDiagnostics(ILogger<LoggingLobbyDiagno
     }
 
     public void SaveFailed(Exception exception) => LogSaveFailed(logger, exception);
+
+    public void Received(LobbyInput input)
+    {
+        if (logger.IsEnabled(LogLevel.Information) && LobbyTrace.Describe(input) is { } line)
+        {
+            LogReceived(logger, line);
+        }
+    }
+
+    public void Sending(LobbyCommand command)
+    {
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            LogSending(logger, LobbyTrace.Describe(command));
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Lobby: {Line}")]
+    private static partial void LogReceived(ILogger logger, string line);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot: {Line}")]
+    private static partial void LogSending(ILogger logger, string line);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "The lobby could not handle {Input}; it carries on.")]
     private static partial void LogInputFailed(ILogger logger, string input, Exception exception);
