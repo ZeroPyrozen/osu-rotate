@@ -95,6 +95,9 @@ public static partial class OwnerAuthentication
                     {
                         if (IsOwner(context.Principal, login))
                         {
+                            // Survives closing the browser: the cookie lasts ExpireTimeSpan (7 days),
+                            // renewed while the owner keeps using the dashboard.
+                            context.Properties!.IsPersistent = true;
                             return Task.CompletedTask;
                         }
 

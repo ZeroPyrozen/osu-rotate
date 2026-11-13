@@ -1,6 +1,6 @@
 # Reach the dashboard through Tailscale, not a Cloudflare Tunnel
 
-Status: accepted, 2026-11-13
+Status: accepted, 2026-11-13. Changed by ADR 0002: the dashboard is now public through Funnel.
 
 ## Context
 

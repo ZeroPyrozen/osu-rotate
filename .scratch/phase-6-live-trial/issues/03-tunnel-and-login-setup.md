@@ -1,6 +1,6 @@
 # Tailscale and dashboard login
 
-Status: ready-for-human
+Status: done
 
 Blocked by: 01
 
@@ -54,3 +54,14 @@ but needs the host node tagged, which would touch the existing public site. The 
 of `tailscale status --json` and `serve status`, and the flags it uses (`up --hostname`,
 `serve --bg --https`, `serve reset`, `tailscaled --port=0`), were checked against v1.102.3 on the
 Pi, read-only.
+
+2026-11-13, owner ran `bash tailscale-node.sh install` on the Pi: the unit was written and
+enabled, the device was approved, and it serves `https://osu-rotate.<tailnet>.ts.net` to
+`127.0.0.1:5180`, "tailnet only". Checked read-only afterwards: `tailscaled-osu-rotate` is active,
+the new node has no Funnel, and the earlier `:8443` serve on the other node is gone. This PC isn't
+on the tailnet, so reaching the address is the owner's check. Left: key expiry off, the OAuth app,
+the settings.
+
+2026-11-13: the owner reports key expiry off, the OAuth app created with the printed callback,
+and the four settings in place. Issue 03 is done; the login itself is checked in issue 04.
+

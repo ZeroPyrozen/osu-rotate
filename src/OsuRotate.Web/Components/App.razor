@@ -5,6 +5,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
+    @* No icon file: an empty one stops the browser asking for /favicon.ico. The CSP allows data: images. *@
+    <link rel="icon" href="data:," />
     <ResourcePreloader />
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["OsuRotate.Web.styles.css"]" />

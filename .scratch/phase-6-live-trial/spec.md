@@ -24,7 +24,8 @@ Issues marked `ready-for-human` are the owner's steps; `ready-for-agent` ones an
 
 - Kestrel stays on `127.0.0.1:5180`; only `tailscale serve` on the Pi reaches it, so forwarded
   headers are trusted from loopback only (phase 5, issue 08).
-- The dashboard is on the tailnet only: no Cloudflare Tunnel, no Tailscale Funnel (ADR 0001).
+- No Cloudflare Tunnel (ADR 0001). The dashboard is public through Tailscale Funnel, behind the
+  osu! login (ADR 0002).
 - The dashboard has its own Tailscale node, `osu-rotate`, next to the Pi's existing one, so its
   address is `https://osu-rotate.<tailnet>.ts.net` (ADR 0001, `deploy/tailscale-node.sh`).
 - `Dashboard__Host` and the OAuth callback must match that name.
