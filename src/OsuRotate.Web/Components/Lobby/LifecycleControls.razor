@@ -3,6 +3,7 @@
 @inject LobbyRuntime Runtime
 
 <section class="lobby-lifecycle" aria-label="Lobby controls">
+    <h2>Room</h2>
     @if (LifecycleActions.CanOpen(Snapshot))
     {
         <form class="create" @onsubmit="CreateAsync">

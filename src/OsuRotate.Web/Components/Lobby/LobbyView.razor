@@ -4,7 +4,7 @@
 
 @* Renders one snapshot. Everything from players and Bancho is shown as text, never as markup. *@
 
-<section class="lobby-status" aria-label="Lobby status">
+<section class="lobby-status" aria-label="Lobby status" data-status="@Status" data-connected="@(Snapshot?.Connected == true ? "yes" : "no")">
     <p>Lobby status: <strong>@Status</strong></p>
     <p class="connection">Bancho: <strong>@(Snapshot?.Connected == true ? "connected" : "not connected")</strong></p>
 
@@ -73,6 +73,7 @@
         }
         else
         {
+            <div class="table-scroll">
             <table>
                 <thead>
                     <tr><th>Slot</th><th>Player</th><th>Team</th><th>State</th></tr>
@@ -106,6 +107,7 @@
                     }
                 </tbody>
             </table>
+            </div>
         }
     </section>
 

@@ -7,16 +7,18 @@
    counted in the server's time zone, as the chat times are. *@
 
 <section class="match-stats" aria-label="Stats">
-    <h2>Stats</h2>
-    <label>
-        Over the last
-        <select value="@_days" @onchange="ChangeWindowAsync">
-            @foreach (var days in Windows)
-            {
-                <option value="@days">@days days</option>
-            }
-        </select>
-    </label>
+    <div class="section-head">
+        <h2>Stats</h2>
+        <label class="window">
+            Over the last
+            <select value="@_days" @onchange="ChangeWindowAsync">
+                @foreach (var days in Windows)
+                {
+                    <option value="@days">@days days</option>
+                }
+            </select>
+        </label>
+    </div>
 
     @if (_failed)
     {
@@ -24,55 +26,83 @@
     }
     else if (_stats is null)
     {
-        <p>Loading…</p>
+        <p class="empty">Loading…</p>
     }
     else if (_stats.Matches == 0)
     {
-        <p>No matches in this time.</p>
+        <p class="empty">No matches in this time.</p>
     }
     else
     {
-        <p class="total">@_stats.Matches @(_stats.Matches == 1 ? "match" : "matches")</p>
+        <div class="stats-grid">
+            <figure class="per-day">
+                <figcaption>
+                    <span class="total">@_stats.Matches @(_stats.Matches == 1 ? "match" : "matches")</span>
+                    <span class="caption">Matches per day, busiest @Count(_busiest, "match")</span>
+                </figcaption>
 
-        <h3>Most played maps</h3>
-        <ol class="maps">
-            @foreach (var map in _stats.Maps)
-            {
-                <li><a href="@MatchList.MapLink(map.BeatmapId)" target="_blank" rel="noopener noreferrer">@map.BeatmapId</a>: @Count(map.Plays, "play")</li>
-            }
-        </ol>
+                @* Drawn with SVG shapes and attributes, never style attributes, so the CSP holds. The
+                   newest day carries the accent; every bar has its day and count as a tooltip. *@
+                <svg class="chart" viewBox="0 0 @ChartWidth @ChartHeight" preserveAspectRatio="none" role="img"
+                     aria-label="@($"Matches per day over the last {_days} days, busiest {_busiest}")">
+                    <line class="baseline" x1="0" y1="@ChartHeight" x2="@ChartWidth" y2="@ChartHeight" />
+                    @for (var i = 0; i < _timeline.Count; i++)
+                    {
+                        var day = _timeline[i];
+                        var height = BarHeight(day.Matches);
+                        <rect class="@(i == _timeline.Count - 1 ? "bar latest" : "bar")"
+                              x="@Number(i * Step + BarGap / 2)" y="@Number(ChartHeight - height)"
+                              width="@Number(Step - BarGap)" height="@Number(height)" data-day="@DayText(day.Day)" data-matches="@day.Matches">
+                            <title>@DayText(day.Day): @Count(day.Matches, "match")</title>
+                        </rect>
+                    }
+                </svg>
+                <div class="axis">
+                    <span>@DayText(_timeline[0].Day)</span>
+                    <span>@DayText(_timeline[^1].Day)</span>
+                </div>
+            </figure>
 
-        <h3>Most active players</h3>
-        <ol class="players">
-            @foreach (var player in _stats.Players)
-            {
-                <li>@player.Name: @Count(player.Matches, "match")</li>
-            }
-        </ol>
+            <div class="ranked">
+                <h3>Most played maps</h3>
+                <ol class="maps">
+                    @foreach (var map in _stats.Maps)
+                    {
+                        <li><a href="@MatchList.MapLink(map.BeatmapId)" target="_blank" rel="noopener noreferrer">@map.BeatmapId</a>: @Count(map.Plays, "play")</li>
+                    }
+                </ol>
+            </div>
 
-        <h3>Matches per day</h3>
-        <table class="per-day">
-            <tbody>
-                @foreach (var day in _stats.PerDay)
-                {
-                    <tr>
-                        <td>@day.Day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)</td>
-                        <td>@day.Matches</td>
-                        <td><meter min="0" max="@_busiest" value="@day.Matches"></meter></td>
-                    </tr>
-                }
-            </tbody>
-        </table>
+            <div class="ranked">
+                <h3>Most active players</h3>
+                <ol class="players">
+                    @foreach (var player in _stats.Players)
+                    {
+                        <li>@player.Name: @Count(player.Matches, "match")</li>
+                    }
+                </ol>
+            </div>
+        </div>
     }
 </section>
 
 @code {
     public static readonly int[] Windows = [7, 30, 90, 365];
 
+    private const double ChartHeight = 100;
+    private const double Step = 10;
+    private const double Gap = 2;
+
     private int _days = 30;
     private MatchStats? _stats;
     private int _busiest = 1;
+    private List<DayCount> _timeline = [];
     private bool _failed;
+
+    private double ChartWidth => Math.Max(1, _timeline.Count) * Step;
+
+    // Past three months the bars are too thin for gaps, so they join into one shape.
+    private double BarGap => _timeline.Count > 92 ? 0 : Gap;
 
     protected override Task OnInitializedAsync() => LoadAsync();
 
@@ -93,9 +123,8 @@
         try
         {
             _stats = await Archive.StatsAsync(new MatchStatsQuery(now.AddDays(-_days), offset), CancellationToken.None);
-
-            // The busiest day fills the bar. A meter, not a styled span: the CSP allows no style attributes.
-            _busiest = _stats.PerDay.Count == 0 ? 1 : _stats.PerDay.Max(d => d.Matches);
+            _busiest = _stats.PerDay.Count == 0 ? 1 : Math.Max(1, _stats.PerDay.Max(d => d.Matches));
+            _timeline = Timeline(_stats.PerDay, DateOnly.FromDateTime(now.ToOffset(offset).DateTime), _days);
             _failed = false;
         }
 #pragma warning disable CA1031 // A database error shows a message instead of breaking the page.
@@ -105,6 +134,28 @@
             _failed = true;
         }
     }
+
+    // Every day of the window up to today, with the days that had no match as zero, so the chart
+    // shows quiet days too.
+    public static List<DayCount> Timeline(IReadOnlyList<DayCount> perDay, DateOnly today, int days)
+    {
+        var counts = perDay.ToDictionary(d => d.Day, d => d.Matches);
+        var first = perDay.Count > 0 ? new[] { perDay.Min(d => d.Day), today.AddDays(-days) }.Max() : today.AddDays(-days);
+        var timeline = new List<DayCount>();
+        for (var day = first; day <= today; day = day.AddDays(1))
+        {
+            timeline.Add(new DayCount(day, counts.GetValueOrDefault(day)));
+        }
+
+        return timeline;
+    }
+
+    // An empty day still gets a sliver, so the timeline reads as days and not as gaps.
+    private double BarHeight(int matches) => matches == 0 ? 1 : Math.Max(3, ChartHeight * matches / _busiest);
+
+    private static string Number(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+
+    private static string DayText(DateOnly day) => day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     private static string Count(int count, string noun) =>
         string.Create(CultureInfo.InvariantCulture, $"{count} {noun}{(count == 1 ? string.Empty : noun.EndsWith('h') ? "es" : "s")}");

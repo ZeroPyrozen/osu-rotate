@@ -201,8 +201,15 @@ public class HistoryTests
             Assert.Contains("alice: 2 matches", html, StringComparison.Ordinal);
             Assert.Contains("&lt;i&gt;bob&lt;/i&gt;: 1 match<", html, StringComparison.Ordinal);
             Assert.DoesNotContain("old:", html, StringComparison.Ordinal);
-            Assert.Contains("<meter min=\"0\" max=\"2\" value=\"2\">", html, StringComparison.Ordinal);
-            Assert.Contains("<meter min=\"0\" max=\"2\" value=\"1\">", html, StringComparison.Ordinal);
+            // The chart: one bar per day from the first match to today, quiet days included, the
+            // busiest day full height and today in the accent.
+            Assert.Contains("data-day=\"2026-03-08\" data-matches=\"1\"", html, StringComparison.Ordinal);
+            Assert.Contains("data-day=\"2026-03-09\" data-matches=\"2\"", html, StringComparison.Ordinal);
+            Assert.Contains("data-day=\"2026-03-10\" data-matches=\"0\"", html, StringComparison.Ordinal);
+            Assert.Equal(3, html.Split("<rect ").Length - 1);
+            Assert.Matches("class=\"bar latest\"[^>]*data-day=\"2026-03-10\"", html);
+            Assert.Matches("y=\"0\"[^>]*height=\"100\" data-day=\"2026-03-09\"", html);
+            Assert.Contains("busiest 2 matches", html, StringComparison.Ordinal);
         }
     }
 
