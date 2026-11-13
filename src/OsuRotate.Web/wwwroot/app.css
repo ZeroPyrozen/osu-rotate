@@ -1,53 +1,50 @@
-/* osu-rotate: a referee's desk at night. Graphite surfaces, one osu!-style pink accent used for the
-   current host, the primary action and the active page, monospace for slots, scores and commands.
-   No inline styles anywhere (the CSP forbids them): everything is here or in .razor.css files. */
+/* osu-rotate, styled after osu!lazer's multiplayer screens: every surface is a dark tint of one
+   hue (lazer's "Plum", 320), highlights are the bright tint of it, and mods carry lazer's colours
+   by kind. Dark only, like lazer. Nunito (SIL OFL, fonts/Nunito-OFL.txt) stands in for lazer's
+   Torus, which isn't free to ship. No inline styles anywhere (the CSP forbids them). */
 
-:root {
-    color-scheme: light dark;
-
-    --page: #fafafa;
-    --surface: #ffffff;
-    --surface-raised: #f4f4f5;
-    --text: #171717;
-    --text-2: #525252;
-    --text-3: #737373;
-    --hairline: rgb(23 23 23 / 0.09);
-    --hairline-strong: rgb(23 23 23 / 0.16);
-    --accent: #d6246e;
-    --accent-ink: #b41c5c;
-    --on-accent: #ffffff;
-    --accent-soft: rgb(214 36 110 / 0.09);
-    --positive: #16a34a;
-    --negative: #dc2626;
-    --waiting: #b7791f;
-    --shadow: 0 1px 2px rgb(0 0 0 / 0.05);
-    --bar: #d4d4d8;
-
-    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-    --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, "Liberation Mono", monospace;
-    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+@font-face {
+    font-family: "Nunito";
+    src: url("fonts/nunito-latin-wght.woff2") format("woff2");
+    font-weight: 200 1000;
+    font-style: normal;
+    font-display: swap;
 }
 
-@media (prefers-color-scheme: dark) {
-    :root {
-        --page: #141415;
-        --surface: #19191b;
-        --surface-raised: #232325;
-        --text: #ededed;
-        --text-2: #a1a1a6;
-        --text-3: #85858b;
-        --hairline: rgb(237 237 237 / 0.08);
-        --hairline-strong: rgb(237 237 237 / 0.14);
-        --accent: #ff66aa;
-        --accent-ink: #ff7fb8;
-        --on-accent: #1a0710;
-        --accent-soft: rgb(255 102 170 / 0.12);
-        --positive: #4cc38a;
-        --negative: #e5484d;
-        --waiting: #e0a54a;
-        --shadow: none;
-        --bar: #3a3a3e;
-    }
+:root {
+    color-scheme: dark;
+
+    /* lazer's OverlayColourProvider at hue 320: Background6 to Background3, Content and Light. */
+    --page: hsl(320 10% 10%);
+    --surface: hsl(320 10% 15%);
+    --surface-raised: hsl(320 10% 20%);
+    --surface-high: hsl(320 10% 25%);
+    --text: #ffffff;
+    --text-2: hsl(320 40% 90%);
+    --text-3: hsl(320 10% 62%);
+    --label: hsl(320 40% 80%);
+    --hairline: hsl(320 10% 22%);
+    --hairline-strong: hsl(320 10% 30%);
+    --accent: hsl(320 100% 70%);
+    --accent-ink: hsl(320 100% 78%);
+    --on-accent: hsl(320 10% 10%);
+    --accent-soft: hsl(320 100% 70% / 0.14);
+    --positive: #66ff73;
+    --negative: #ff6666;
+    --waiting: #ffd966;
+    --shadow: 0 8px 24px hsl(320 10% 4% / 0.5);
+    --bar: hsl(320 10% 32%);
+
+    /* lazer's OsuColour.ForModType. */
+    --mod-reduction: #b2ff66;
+    --mod-increase: #ff6666;
+    --mod-automation: #66ccff;
+    --mod-conversion: #8c66ff;
+    --mod-free: hsl(320 100% 70%);
+
+    --sans: "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, "Liberation Mono", monospace;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* Base */
@@ -83,7 +80,7 @@ a:hover {
 
 h1, h2, h3 {
     margin: 0;
-    font-weight: 500;
+    font-weight: 700;
 }
 
 h1:focus {
@@ -142,7 +139,7 @@ time, .mono {
 }
 
 .wordmark {
-    font-weight: 600;
+    font-weight: 700;
     font-size: 16px;
     text-decoration: none;
     letter-spacing: 0;
@@ -647,6 +644,27 @@ tr:last-child td {
     color: var(--text-3);
 }
 
+/* Player states as lazer's pills. */
+.state {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    background: var(--surface-high);
+    color: var(--text-2);
+}
+
+.state.playing {
+    background: hsl(320 100% 70% / 0.18);
+    color: var(--accent-ink);
+}
+
+.state.finished {
+    background: rgb(102 255 115 / 0.14);
+    color: var(--positive);
+}
+
 /* Room lifecycle */
 
 .lobby-lifecycle {
@@ -768,57 +786,271 @@ tr:last-child td {
     padding: 0 20px 12px;
 }
 
-/* Rules */
+/* Rules: lazer's settings layout. Sections side by side, each a column of rounded form rows on
+   the card, label on the left, the control on the right. */
 
 form.rules {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
     gap: 16px;
     margin: 0;
+    align-items: start;
 }
 
-form.rules fieldset {
+.settings-section {
     margin: 0;
-    padding: 16px;
-    border: 1px solid var(--hairline);
-    border-radius: 10px;
+    padding: 0;
+    border: 0;
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    min-width: 0;
+    gap: 4px;
 }
 
-form.rules legend {
-    padding: 0 6px;
-    font-weight: 500;
+.settings-section legend {
+    padding: 0 0 8px;
+    font-size: 15px;
+    font-weight: 700;
     color: var(--text);
-    font-size: 14px;
 }
 
-form.rules label {
+.form-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 8px;
+    gap: 16px;
+    min-height: 52px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: var(--surface-raised);
+    color: var(--text);
 }
 
-form.rules label:has(> input[type=checkbox]) {
-    justify-content: flex-start;
+.form-row.stacked,
+.form-row.tile-row,
+.form-row.mod-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px;
 }
 
-form.rules textarea {
+.form-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.form-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--label);
+}
+
+.form-hint {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--text-3);
+}
+
+.form-row input:not([type=checkbox]):not([type=range]),
+.form-row textarea {
+    background: var(--page);
+    border-color: var(--hairline-strong);
+}
+
+.text-row input {
+    flex: 0 1 220px;
+    min-width: 0;
+}
+
+.form-row.stacked textarea {
     width: 100%;
     min-height: 96px;
 }
 
-form.rules > :not(fieldset) {
-    grid-column: 1 / -1;
+/* lazer's SwitchButton: a pill track with a round nub, lit in the highlight colour when on. */
+input.switch {
+    appearance: none;
+    flex: none;
+    position: relative;
+    width: 44px;
+    height: 24px;
+    margin: 0;
+    border-radius: 12px;
+    background: var(--surface-high);
+    border: 2px solid var(--hairline-strong);
+    cursor: pointer;
+    transition: background-color 160ms var(--ease), border-color 160ms var(--ease);
 }
 
-form.rules > button,
-form.rules > div {
-    justify-self: start;
+input.switch::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--text-3);
+    transition: transform 160ms var(--ease), background-color 160ms var(--ease);
+}
+
+input.switch:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+input.switch:checked::before {
+    transform: translateX(20px);
+    background: var(--on-accent);
+}
+
+/* Tiles: lazer's game type picker. The chosen one is outlined and lit. */
+.tiles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.tiles.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.tiles.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.tile {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background: var(--surface-high);
+    color: var(--text-2);
+    text-align: left;
+    font-weight: 600;
+}
+
+.tiles.compact .tile {
+    align-items: center;
+    text-align: center;
+    padding: 8px;
+}
+
+.tile:hover:not(:disabled) {
+    border-color: var(--hairline-strong);
+}
+
+.tile.chosen,
+.tile.chosen:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--text);
+}
+
+.tile-name {
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.tile-note {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-3);
+}
+
+/* Sliders: lazer's bars, in the highlight colour, with the value beside them. */
+.slider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 0 1 260px;
+    min-width: 0;
+}
+
+.slider input[type=range] {
+    flex: 1;
+    min-width: 0;
+    accent-color: var(--accent);
+}
+
+.slider-value {
+    min-width: 64px;
+    text-align: right;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+}
+
+.number {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.number .unit {
+    color: var(--text-3);
+    font-size: 13px;
+}
+
+/* Mods: lazer's mod buttons, coloured by kind; lit when chosen. */
+.mods {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+    gap: 8px;
+}
+
+.mod {
+    --mod: var(--mod-increase);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 4px;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background: var(--surface-high);
+    color: var(--text-2);
+}
+
+.mod.reduction { --mod: var(--mod-reduction); }
+.mod.increase { --mod: var(--mod-increase); }
+.mod.automation { --mod: var(--mod-automation); }
+.mod.conversion { --mod: var(--mod-conversion); }
+.mod.freemod { --mod: var(--mod-free); }
+
+.mod-code {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--mod);
+    letter-spacing: 0.02em;
+}
+
+.mod-name {
+    font-size: 11px;
+    line-height: 14px;
+    font-weight: 600;
+    color: var(--text-3);
+}
+
+.mod:hover:not(:disabled) {
+    border-color: var(--mod);
+}
+
+.mod.on,
+.mod.on:hover:not(:disabled) {
+    background: var(--mod);
+    border-color: var(--mod);
+}
+
+.mod.on .mod-code,
+.mod.on .mod-name {
+    color: var(--on-accent);
+}
+
+.form-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 8px;
 }
 
 /* History */
@@ -1117,6 +1349,10 @@ section + .match-list {
 }
 
 @media (max-width: 640px) {
+    .tiles.cols-4 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     body {
         font-size: 14px;
     }

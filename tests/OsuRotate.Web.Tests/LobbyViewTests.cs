@@ -81,7 +81,7 @@ public sealed class LobbyViewTests : IAsyncDisposable
         Assert.Contains("Players (2/16)", html, StringComparison.Ordinal);
         Assert.Contains("href=\"https://osu.ppy.sh/users/11\"", html, StringComparison.Ordinal);
         Assert.Contains("<td>Blue</td>", html, StringComparison.Ordinal);
-        Assert.Contains("<td>playing</td>", html, StringComparison.Ordinal);
+        Assert.Contains("<td><span class=\"state playing\">playing</span></td>", html, StringComparison.Ordinal);
         Assert.Matches("<li class=\"host\">\\s*p1", html);
         Assert.True(html.IndexOf("p1", StringComparison.Ordinal) < html.IndexOf("p 2", StringComparison.Ordinal));
     }

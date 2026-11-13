@@ -1,0 +1,47 @@
+@using System.Globalization
+@* A whole number with its unit, for counts and seconds. *@
+
+<label class="form-row number-row">
+    <span class="form-text">
+        <span class="form-label">@Label</span>
+        @if (Hint is not null)
+        {
+            <span class="form-hint">@Hint</span>
+        }
+    </span>
+    <span class="number">
+        <input type="number" min="@Min" max="@Max" value="@Value.ToString(CultureInfo.InvariantCulture)" @onchange="OnChange" />
+        @if (Unit is not null)
+        {
+            <span class="unit">@Unit</span>
+        }
+    </span>
+</label>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Hint { get; set; }
+
+    [Parameter]
+    public string? Unit { get; set; }
+
+    [Parameter]
+    public int Value { get; set; }
+
+    [Parameter]
+    public EventCallback<int> ValueChanged { get; set; }
+
+    [Parameter]
+    public int? Min { get; set; }
+
+    [Parameter]
+    public int? Max { get; set; }
+
+    private Task OnChange(ChangeEventArgs args) =>
+        int.TryParse(args.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+            ? ValueChanged.InvokeAsync(value)
+            : Task.CompletedTask;
+}

@@ -1,0 +1,70 @@
+@using OsuRotate.Domain
+@* The room's mods as lazer's mod select shows them: a button per mod, coloured by kind, any number
+   chosen. Writes the same text the form always used ("HD HR", "Freemod", "None"), so saving and
+   validation are unchanged. *@
+
+<div class="form-row mod-row">
+    <span class="form-text">
+        <span class="form-label">Mods</span>
+        <span class="form-hint">@Summary</span>
+    </span>
+    <div class="mods" role="group" aria-label="Mods">
+        <button type="button" class="mod freemod @(Has(Mods.Freemod) ? "on" : null)" aria-pressed="@(Has(Mods.Freemod) ? "true" : "false")"
+                disabled="@Disabled" @onclick="() => Flip(Mods.Freemod)">
+            <span class="mod-code">FM</span><span class="mod-name">Freemod</span>
+        </button>
+        @foreach (var mod in Choices)
+        {
+            <button type="button" class="mod @mod.Kind @(Has(mod.Mod) ? "on" : null)" aria-pressed="@(Has(mod.Mod) ? "true" : "false")"
+                    title="@(CanAdd(mod.Mod) ? mod.Name : $"{mod.Name} doesn't go with the mods chosen")" disabled="@(Disabled || !CanAdd(mod.Mod))" @onclick="() => Flip(mod.Mod)">
+                <span class="mod-code">@mod.Code</span><span class="mod-name">@mod.Name</span>
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    private sealed record ModChoice(Mods Mod, string Code, string Name, string Kind);
+
+    // The mods Bancho takes in !mp mods, grouped by lazer's mod types (their colours are in app.css).
+    private static readonly ModChoice[] Choices =
+    [
+        new(Mods.Easy, "EZ", "Easy", "reduction"),
+        new(Mods.NoFail, "NF", "No Fail", "reduction"),
+        new(Mods.HalfTime, "HT", "Half Time", "reduction"),
+        new(Mods.HardRock, "HR", "Hard Rock", "increase"),
+        new(Mods.SuddenDeath, "SD", "Sudden Death", "increase"),
+        new(Mods.DoubleTime, "DT", "Double Time", "increase"),
+        new(Mods.Nightcore, "NC", "Nightcore", "increase"),
+        new(Mods.Hidden, "HD", "Hidden", "increase"),
+        new(Mods.Flashlight, "FL", "Flashlight", "increase"),
+        new(Mods.FadeIn, "FI", "Fade In", "increase"),
+        new(Mods.Relax, "RX", "Relax", "automation"),
+        new(Mods.Relax2, "AP", "Autopilot", "automation"),
+        new(Mods.SpunOut, "SO", "Spun Out", "automation"),
+        new(Mods.Mirror, "MR", "Mirror", "conversion"),
+        new(Mods.Random, "RD", "Random", "conversion"),
+    ];
+
+    [Parameter]
+    public string? Value { get; set; }
+
+    [Parameter]
+    public EventCallback<string?> ValueChanged { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    private Mods Current => RoomModes.ParseMods(Value ?? string.Empty);
+
+    private bool Has(Mods mod) => Current.HasFlag(mod);
+
+    private string Summary => Current == Mods.None ? "No mods" : Current.ToMpValue();
+
+    // A mod that the room's rules would drop again (one Freemod doesn't allow, or Hard Rock next to
+    // Easy) can't be added; turning Freemod on drops what it doesn't allow. The same pruning as
+    // saving, so what is shown is what gets kept.
+    private bool CanAdd(Mods mod) => Has(mod) || RoomModes.RemoveInvalidCombinations(Current | mod).HasFlag(mod);
+
+    private Task Flip(Mods mod) => ValueChanged.InvokeAsync(RoomModes.RemoveInvalidCombinations(Current ^ mod).ToMpValue());
+}
