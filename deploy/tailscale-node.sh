@@ -8,8 +8,9 @@
 #   bash deploy/tailscale-node.sh remove  [name]
 #
 # install writes the unit, starts it, joins the tailnet (it prints a login link for you to open)
-# and serves https://<name>.<tailnet>.ts.net on port 443 to the app on 127.0.0.1:5180. No Funnel:
-# the dashboard stays on your tailnet. Running it again changes nothing that is already in place.
+# and serves https://<name>.<tailnet>.ts.net on port 443 to the app on 127.0.0.1:5180, on your
+# tailnet only. deploy/README.md says how to add Funnel to make it public. Running it again changes
+# nothing that is already in place, Funnel included.
 #
 # Needs tailscale and tailscaled (TAILSCALE_BIN, default ~/.local/bin) and lingering on, so the
 # unit runs while you're logged out: sudo loginctl enable-linger "$USER".

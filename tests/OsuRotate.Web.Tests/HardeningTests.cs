@@ -137,6 +137,12 @@ public sealed partial class HardeningTests : IDisposable
         Assert.Contains("secure", session, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("httponly", session, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("samesite=lax", session, StringComparison.OrdinalIgnoreCase);
+
+        // A persistent cookie, so the login survives closing the browser, for 7 days.
+        var expires = System.Text.RegularExpressions.Regex.Match(session, "expires=([^;]+)", RegexOptions.IgnoreCase);
+        Assert.True(expires.Success, session);
+        var left = DateTimeOffset.Parse(expires.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) - DateTimeOffset.UtcNow;
+        Assert.InRange(left, TimeSpan.FromDays(7) - TimeSpan.FromMinutes(5), TimeSpan.FromDays(7) + TimeSpan.FromMinutes(5));
     }
 
     [Theory]
@@ -177,6 +183,7 @@ public sealed partial class HardeningTests : IDisposable
         var html = await browser.GetStringAsync(new Uri(path, UriKind.Relative));
 
         Assert.Contains("<script", html, StringComparison.Ordinal);
+        Assert.Contains("<link rel=\"icon\" href=\"data:,\"", html, StringComparison.Ordinal);
         if (path == "/history")
         {
             Assert.Contains("<meter", html, StringComparison.Ordinal);
@@ -283,6 +290,41 @@ public sealed partial class HardeningTests : IDisposable
             factory.Dispose();
             factory.DeleteFolder();
         }
+    }
+
+    // Through Funnel the dashboard is on the public internet (ADR 0002), so this is the whole list of
+    // what a stranger can reach without the owner's login. A new page is the owner's by default
+    // (the fallback policy); anything added here must be meant for anyone.
+    [Fact]
+    public void Only_these_routes_are_open_to_anyone()
+    {
+        var endpoints = _factory.Services.GetRequiredService<Microsoft.AspNetCore.Routing.EndpointDataSource>().Endpoints
+            .OfType<Microsoft.AspNetCore.Routing.RouteEndpoint>()
+            .ToList();
+        Assert.NotEmpty(endpoints);
+
+        var open = endpoints
+            .Where(e => e.Metadata.GetMetadata<Microsoft.AspNetCore.Authorization.IAllowAnonymous>() is not null)
+            .Select(e => e.RoutePattern.RawText ?? string.Empty)
+            .Where(route => !IsStaticFile(route))
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Equal(["/Error", "/healthz", "/not-found", "/signed-out"], open);
+    }
+
+    // Static assets are the app's own CSS, JavaScript and images: files with an extension.
+    private static bool IsStaticFile(string route) =>
+        Path.HasExtension(route.Split('/')[^1]) && !route.Contains('{', StringComparison.Ordinal);
+
+    [Fact]
+    public async Task The_error_page_tells_visitors_nothing_about_the_setup()
+    {
+        var html = await (await GetAsync(Client("https://localhost"), "/Error")).Content.ReadAsStringAsync();
+        Assert.Contains("An error occurred", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Development", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("ASPNETCORE_ENVIRONMENT", html, StringComparison.Ordinal);
     }
 
     [GeneratedRegex("<script[^>]*>", RegexOptions.IgnoreCase)]

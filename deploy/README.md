@@ -71,11 +71,12 @@ On a restart, the bot rejoins the room it had open and restores the queue.
 
 ## Setting up the dashboard login
 
-The dashboard is only on your tailnet, under a name of its own: a second Tailscale node on the Pi,
-called `osu-rotate`, serves it at `https://osu-rotate.<tailnet>.ts.net`. Only your own Tailscale
-devices can open it, and only your osu! account can log in
-(`docs/adr/0001-tailscale-instead-of-cloudflare-tunnel.md`). Nothing is reachable from the
-internet, and any Tailscale node you already run on the Pi is left alone.
+The dashboard has a name of its own: a second Tailscale node on the Pi, called `osu-rotate`, serves
+it at `https://osu-rotate.<tailnet>.ts.net`, and Tailscale Funnel makes that address reachable
+from any browser. Only your osu! account can log in; everyone else gets "for its owner only"
+(`docs/adr/0001-tailscale-instead-of-cloudflare-tunnel.md`,
+`docs/adr/0002-public-dashboard-through-funnel.md`). Any Tailscale node you already run on the Pi
+is left alone.
 
 Below, `<name>` is that address's name, `osu-rotate.<tailnet>.ts.net`. Keep your tailnet's name out
 of this repo; it belongs only on the Pi and in osu!.
@@ -83,7 +84,8 @@ of this repo; it belongs only on the Pi and in osu!.
 ### 1. Give the dashboard its own node on your tailnet
 
 Your tailnet needs MagicDNS and HTTPS certificates turned on (Tailscale admin console, **DNS**).
-The Pi needs `tailscale` and `tailscaled` in `~/.local/bin` (or set `TAILSCALE_BIN`), and
+Until step 1b turns Funnel on, only devices on your tailnet (with the Tailscale app signed in)
+can open the address. The Pi needs `tailscale` and `tailscaled` in `~/.local/bin` (or set `TAILSCALE_BIN`), and
 lingering on, so the node keeps running while you're logged out:
 
 ```bash
@@ -106,6 +108,23 @@ already in place. `bash tailscale-node.sh status` shows how it's doing, and
 
 In the Tailscale admin console, open the new `osu-rotate` machine and choose **Disable key
 expiry**, so it doesn't drop off your tailnet after a few months.
+
+### 1b. Make it reachable from anywhere (Funnel)
+
+Your tailnet's policy must allow Funnel for the node (the admin console's **Access controls**
+gives members the `funnel` attribute when you first turn Funnel on anywhere). Then, on the Pi:
+
+```bash
+~/.local/bin/tailscale --socket=/run/user/$(id -u)/tailscaled-osu-rotate.sock funnel --bg --https=443 http://127.0.0.1:5180
+```
+
+`bash tailscale-node.sh status` should now show `(Funnel on)` for the address. It can take a
+minute or two before the name answers from outside. To make it tailnet-only again:
+
+```bash
+~/.local/bin/tailscale --socket=/run/user/$(id -u)/tailscaled-osu-rotate.sock funnel --https=443 off
+bash tailscale-node.sh install
+```
 
 ### 2. Create the osu! OAuth application
 
@@ -160,7 +179,7 @@ If something goes wrong:
 
 | What you see | What to check |
 | --- | --- |
-| The page doesn't load at all | This device isn't on your tailnet, or the node isn't up: `bash tailscale-node.sh status` on the Pi. |
+| The page doesn't load at all | The node isn't up or Funnel is off: `bash tailscale-node.sh status` on the Pi should show `(Funnel on)`. Right after turning Funnel on, wait a minute or two. |
 | "osu! login is not set up." | One of `Osu__ClientId`, `Osu__ClientSecret` or `Dashboard__OwnerUserId` is missing. |
 | osu! says the redirect URI is invalid | The callback in step 2 must be exactly `https://<name>/signin-osu`. |
 | 400 Bad Request on every page | `Dashboard__Host` doesn't match the name in the address bar. |
@@ -168,7 +187,8 @@ If something goes wrong:
 
 ### What the app does to stay safe
 
-- Cookies are sent over HTTPS only, can't be read by scripts, and the login lasts 7 days.
+- Cookies are sent over HTTPS only and can't be read by scripts. The login survives closing the
+  browser and lasts 7 days, renewed while you keep using the dashboard.
 - Every form that posts carries an antiforgery token.
 - Every response carries a content security policy that allows only the app's own scripts and
   styles, no framing, and no plugins. HTTPS responses also carry `Strict-Transport-Security`.
