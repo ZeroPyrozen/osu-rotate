@@ -25,7 +25,10 @@ else
         <p class="notice" role="status">The osu! login did not complete. Try again.</p>
     }
 
-    <a class="button primary" href="@StartUrl">Log in with osu!</a>
+    @* A full page load, not Blazor's enhanced navigation: that fetches the page in the background,
+       and the redirect to osu! is then a cross-site fetch the CSP (connect-src 'self') blocks, so
+       the button would do nothing. *@
+    <a class="button primary" href="@StartUrl" data-enhance-nav="false">Log in with osu!</a>
     <p class="fine">osu! asks you to approve osu-rotate the first time. It only reads who you are.</p>
 }
 
