@@ -98,11 +98,15 @@ public sealed class BotFactory : WebApplicationFactory<Program>
     {
         Osu.MeId = userId;
         var browser = Browser();
-        var challenge = await browser.GetAsync(new Uri(returnPath, UriKind.Relative));
+        var challenge = await browser.GetAsync(SignInButton(returnPath));
         var state = StateFrom(challenge);
         var callback = await browser.GetAsync(new Uri($"/signin-osu?code=the-code&state={Uri.EscapeDataString(state)}", UriKind.Relative));
         return (browser, callback);
     }
+
+    // Where the sign-in page's "Log in with osu!" button goes.
+    public static Uri SignInButton(string returnPath = "/") =>
+        new($"/signin/osu?returnUrl={Uri.EscapeDataString(returnPath)}", UriKind.Relative);
 
     public static string StateFrom(HttpResponseMessage challenge)
     {

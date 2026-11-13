@@ -1,0 +1,63 @@
+@page "/signin"
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@layout Layout.AccountLayout
+@using OsuRotate.Web.Auth
+@inject OwnerLoginOptions Login
+@inject NavigationManager Navigation
+
+<PageTitle>Log in - osu-rotate</PageTitle>
+
+<h1>Log in</h1>
+<p class="lede">The desk for your auto-host lobby. Only the owner's osu! account can open it.</p>
+
+@if (!Login.IsConfigured)
+{
+    <p class="notice" role="status">
+        osu! login is not set up. Set <code>Osu__ClientId</code>, <code>Osu__ClientSecret</code> and
+        <code>Dashboard__OwnerUserId</code> in the secrets file, then restart.
+    </p>
+}
+else
+{
+    @if (Failed)
+    {
+        <p class="notice" role="status">The osu! login did not complete. Try again.</p>
+    }
+
+    <a class="button primary" href="@StartUrl">Log in with osu!</a>
+    <p class="fine">osu! asks you to approve osu-rotate the first time. It only reads who you are.</p>
+}
+
+@code {
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    [SupplyParameterFromQuery(Name = "ReturnUrl")]
+    private string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery(Name = "failed")]
+    private string? FailedFlag { get; set; }
+
+    private bool Failed => FailedFlag is not null;
+
+    private string StartUrl => $"{OwnerAuthentication.StartOsuLoginPath}?returnUrl={Uri.EscapeDataString(OwnerAuthentication.LocalPath(ReturnUrl))}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Login.IsConfigured)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            return;
+        }
+
+        // Already in: straight on to where they were going.
+        if (AuthenticationState is not null && OwnerAuthentication.IsOwner((await AuthenticationState).User, Login))
+        {
+            Navigation.NavigateTo(OwnerAuthentication.LocalPath(ReturnUrl));
+        }
+    }
+}

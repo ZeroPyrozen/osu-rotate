@@ -42,6 +42,8 @@ public sealed partial class HardeningTests : IDisposable
         return await client.SendAsync(request);
     }
 
+    private const string SignInButton = "/signin/osu?returnUrl=%2F";
+
     private static string RedirectUri(HttpResponseMessage challenge) =>
         System.Web.HttpUtility.ParseQueryString(challenge.Headers.Location!.Query)["redirect_uri"]!;
 
@@ -49,7 +51,7 @@ public sealed partial class HardeningTests : IDisposable
     public async Task Https_from_the_proxy_on_loopback_is_trusted()
     {
         _factory.RemoteAddress = IPAddress.Loopback;
-        var challenge = await GetAsync(Client($"http://{PublicHost}"), "/", forwardedProto: "https");
+        var challenge = await GetAsync(Client($"http://{PublicHost}"), SignInButton, forwardedProto: "https");
 
         Assert.Equal(HttpStatusCode.Redirect, challenge.StatusCode);
         Assert.Equal($"https://{PublicHost}/signin-osu", RedirectUri(challenge));
@@ -60,7 +62,7 @@ public sealed partial class HardeningTests : IDisposable
     public async Task Ipv6_loopback_is_trusted_too()
     {
         _factory.RemoteAddress = IPAddress.IPv6Loopback;
-        var challenge = await GetAsync(Client($"http://{PublicHost}"), "/", forwardedProto: "https");
+        var challenge = await GetAsync(Client($"http://{PublicHost}"), SignInButton, forwardedProto: "https");
 
         Assert.Equal($"https://{PublicHost}/signin-osu", RedirectUri(challenge));
     }
@@ -69,7 +71,7 @@ public sealed partial class HardeningTests : IDisposable
     public async Task Forwarded_headers_from_anywhere_else_are_ignored()
     {
         _factory.RemoteAddress = IPAddress.Parse("203.0.113.5");
-        var challenge = await GetAsync(Client($"http://{PublicHost}"), "/", forwardedProto: "https");
+        var challenge = await GetAsync(Client($"http://{PublicHost}"), SignInButton, forwardedProto: "https");
 
         Assert.Equal($"http://{PublicHost}/signin-osu", RedirectUri(challenge));
         Assert.False(challenge.Headers.Contains("Strict-Transport-Security"));
@@ -118,7 +120,7 @@ public sealed partial class HardeningTests : IDisposable
     [Fact]
     public async Task Cookies_are_https_only_even_on_a_plain_http_request()
     {
-        var challenge = await GetAsync(Client("http://localhost"), "/");
+        var challenge = await GetAsync(Client("http://localhost"), SignInButton);
         var correlation = Assert.Single(challenge.Headers.GetValues("Set-Cookie"), c => c.StartsWith(".AspNetCore.Correlation", StringComparison.Ordinal));
         Assert.Contains("secure", correlation, StringComparison.OrdinalIgnoreCase);
 
@@ -311,7 +313,7 @@ public sealed partial class HardeningTests : IDisposable
             .Order(StringComparer.Ordinal)
             .ToList();
 
-        Assert.Equal(["/Error", "/healthz", "/not-found", "/signed-out"], open);
+        Assert.Equal(["/Error", "/denied", "/healthz", "/not-found", "/signed-out", "/signin", "/signin/osu"], open);
     }
 
     // Static assets are the app's own CSS, JavaScript and images: files with an extension.

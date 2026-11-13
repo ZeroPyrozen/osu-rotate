@@ -960,6 +960,95 @@ section + .match-list {
     overflow-x: auto;
 }
 
+/* Account pages: sign in, signed out, not allowed. One card in the middle of a quiet page. */
+
+.account-page {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px 16px;
+}
+
+.account-card {
+    width: 100%;
+    max-width: 400px;
+    padding: 32px;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+}
+
+.account-card .wordmark {
+    margin-bottom: 32px;
+}
+
+.account-card h1 {
+    font-size: 24px;
+    line-height: 32px;
+    margin-bottom: 8px;
+}
+
+.account-card .lede {
+    color: var(--text-2);
+    margin-bottom: 24px;
+}
+
+.account-card .fine {
+    margin-top: 16px;
+    color: var(--text-3);
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.account-card .notice {
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    background: var(--surface-raised);
+    border: 1px solid var(--hairline-strong);
+    font-size: 14px;
+}
+
+.account-card code {
+    font-family: var(--mono);
+    font-size: 13px;
+}
+
+/* A link that does what a button does. */
+.button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 44px;
+    padding: 0 20px;
+    border-radius: 10px;
+    border: 1px solid var(--hairline-strong);
+    background: var(--surface-raised);
+    color: var(--text);
+    font-weight: 500;
+    text-decoration: none;
+    transition: background-color 140ms var(--ease), border-color 140ms var(--ease), transform 120ms var(--ease);
+}
+
+.button:hover {
+    border-color: var(--text-3);
+}
+
+.button:active {
+    transform: scale(0.98);
+}
+
+.button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+}
+
+.button.primary:hover {
+    border-color: var(--accent-ink);
+}
+
 /* Blazor's own error notes */
 
 #blazor-error-ui {

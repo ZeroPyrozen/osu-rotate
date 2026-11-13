@@ -43,16 +43,19 @@ public static partial class OwnerAuthentication
     public const string CallbackPath = "/signin-osu";
     public const string OsuIdClaim = "osu:id";
 
+    // The pages around the login (Components/Pages/Account): anyone may open them.
+    public const string SignInPath = "/signin";
+    public const string StartOsuLoginPath = "/signin/osu";
+    public const string DeniedPath = "/denied";
+    public const string SignedOutPath = "/signed-out";
+
     public static IServiceCollection AddOwnerLogin(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
         var login = OwnerLoginOptions.From(configuration);
         services.AddSingleton(login);
 
-        services.AddAuthentication(options =>
-            {
-                options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = OsuScheme;
-            })
+        // A visitor without a session is sent to the sign-in page, which starts the osu! login.
+        services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
             .AddCookie(options =>
             {
                 options.Cookie.Name = CookieName;
@@ -63,7 +66,8 @@ public static partial class OwnerAuthentication
                 options.Cookie.SecurePolicy = environment.IsDevelopment() ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
                 options.ExpireTimeSpan = TimeSpan.FromDays(7);
                 options.SlidingExpiration = true;
-                options.Events.OnRedirectToAccessDenied = context => Forbidden(context.HttpContext);
+                options.LoginPath = SignInPath;
+                options.AccessDeniedPath = DeniedPath;
             })
             .AddOAuth(OsuScheme, options =>
             {
@@ -84,7 +88,9 @@ public static partial class OwnerAuthentication
                     {
                         if (!login.IsConfigured)
                         {
-                            return NotConfigured(context.HttpContext);
+                            // The sign-in page says what is missing.
+                            context.Response.Redirect(SignInPath);
+                            return Task.CompletedTask;
                         }
 
                         context.Response.Redirect(context.RedirectUri);
@@ -103,13 +109,15 @@ public static partial class OwnerAuthentication
 
                         // No session for anyone else.
                         context.HandleResponse();
-                        return Forbidden(context.HttpContext);
+                        context.Response.Redirect(DeniedPath);
+                        return Task.CompletedTask;
                     },
                     OnRemoteFailure = context =>
                     {
+                        // A forged, replayed or failed callback: no session, and the sign-in page says so.
                         context.HandleResponse();
-                        context.Response.StatusCode = StatusCodes.Status400BadRequest;
-                        return context.Response.WriteAsync("The osu! login did not complete. Go back to the dashboard and try again.");
+                        context.Response.Redirect($"{SignInPath}?failed=1");
+                        return Task.CompletedTask;
                     },
                 };
             });
@@ -132,12 +140,25 @@ public static partial class OwnerAuthentication
             }
 
             await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme).ConfigureAwait(false);
-            return Results.Redirect("/signed-out");
+            return Results.Redirect(SignedOutPath);
         }).DisableAntiforgery();
 
-        endpoints.MapGet("/signed-out", () => Results.Text("Signed out of osu-rotate.")).AllowAnonymous();
+        // The sign-in page's button. Only a path on this site is kept to come back to, so the login
+        // can't be used to send someone elsewhere.
+        endpoints.MapGet(StartOsuLoginPath, (string? returnUrl) =>
+            Results.Challenge(new AuthenticationProperties { RedirectUri = LocalPath(returnUrl) }, [OsuScheme])).AllowAnonymous();
         return endpoints;
     }
+
+    // A path on this site to return to after logging in, or "/" for anything else.
+    public static string LocalPath(string? returnUrl) =>
+        returnUrl is { Length: > 0 } url
+        && url[0] == '/'
+        && (url.Length == 1 || (url[1] != '/' && url[1] != '\\'))
+        && !url.Contains("://", StringComparison.Ordinal)
+        && !url.Any(char.IsControl)
+            ? url
+            : "/";
 
     public static bool IsOwner(ClaimsPrincipal? user, OwnerLoginOptions login) =>
         login.OwnerUserId > 0
@@ -157,19 +178,5 @@ public static partial class OwnerAuthentication
         var name = me.RootElement.TryGetProperty("username", out var username) ? username.GetString() ?? id : id;
         context.Identity?.AddClaim(new Claim(OsuIdClaim, id));
         context.Identity?.AddClaim(new Claim(ClaimTypes.Name, name));
-    }
-
-    private static Task Forbidden(HttpContext context)
-    {
-        context.Response.StatusCode = StatusCodes.Status403Forbidden;
-        context.Response.ContentType = "text/plain; charset=utf-8";
-        return context.Response.WriteAsync("This dashboard is for its owner only.");
-    }
-
-    private static Task NotConfigured(HttpContext context)
-    {
-        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-        context.Response.ContentType = "text/plain; charset=utf-8";
-        return context.Response.WriteAsync("osu! login is not set up. Set Osu__ClientId, Osu__ClientSecret and Dashboard__OwnerUserId, then restart.");
     }
 }
