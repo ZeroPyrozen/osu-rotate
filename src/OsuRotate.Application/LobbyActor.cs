@@ -134,7 +134,7 @@ public sealed class LobbyActor
             if (_engine.NextDue is { } next)
             {
                 using var wake = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                var timer = Task.Delay(next - _time.GetUtcNow(), _time, wake.Token);
+                var timer = Task.Delay(WaitUntil(next, _time.GetUtcNow()), _time, wake.Token);
                 await Task.WhenAny(waitForInput, timer).ConfigureAwait(false);
                 await wake.CancelAsync().ConfigureAwait(false);
             }
@@ -154,6 +154,18 @@ public sealed class LobbyActor
             }
         }
     }
+
+    // How long to wait for a timer that falls due at `due`. The clock moves between deciding the
+    // timer isn't due yet and computing the wait, so the difference can come out just below zero,
+    // and Task.Delay throws on that: the actor crashed this way on the Pi (phase 6, issue 05).
+    // A far-off timer is capped too, since Task.Delay refuses waits past about 49 days.
+    public static TimeSpan WaitUntil(DateTimeOffset due, DateTimeOffset now)
+    {
+        var wait = due - now;
+        return wait <= TimeSpan.Zero ? TimeSpan.Zero : wait > MaxWait ? MaxWait : wait;
+    }
+
+    private static readonly TimeSpan MaxWait = TimeSpan.FromDays(1);
 
     private async Task HandleAsync(Envelope envelope, CancellationToken cancellationToken)
     {

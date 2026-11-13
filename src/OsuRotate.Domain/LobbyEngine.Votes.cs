@@ -164,6 +164,7 @@ public sealed partial class LobbyEngine
         }
         else if ((isHost || isOwner) && Seconds().IsMatch(argument) && int.TryParse(argument, CultureInfo.InvariantCulture, out var seconds))
         {
+            _ownerStartOverride |= isOwner;
             StartMatchIn(seconds);
         }
     }
@@ -198,6 +199,12 @@ public sealed partial class LobbyEngine
     private void StartMatchNow()
     {
         StopStartTimer();
+        if (RefuseStartOnRejectedMap())
+        {
+            StartVotes.Clear();
+            return;
+        }
+
         if (CooledDown(StartMatchKey, StartMatchCooldown))
         {
             _output.Add(new StartMatch());

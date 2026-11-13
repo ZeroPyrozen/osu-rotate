@@ -326,6 +326,7 @@ public sealed partial class LobbyEngine
             case RoomStateReceived e:
                 ApplyRoomState(e.State);
                 KeeperOnRoomState(e.State);
+                MapsOnRoomState(e.State);
                 break;
 
             case ChatReceived e:
@@ -480,6 +481,7 @@ public sealed partial class LobbyEngine
         switch (command.Name)
         {
             case "*start" when !Room.IsMatching:
+                _ownerStartOverride = true;
                 StartMatchNow();
                 break;
             case "*abort" when Room.IsMatching:

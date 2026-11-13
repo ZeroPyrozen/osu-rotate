@@ -11,6 +11,7 @@ public sealed partial class LobbyEngine
     {
         if (!Room.IsMatching && countdownSeconds is >= 0 and <= MaxCountdownSeconds)
         {
+            _ownerStartOverride = true;
             StartMatchIn(countdownSeconds);
         }
 

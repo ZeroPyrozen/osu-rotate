@@ -75,6 +75,29 @@ public sealed class LobbyActorTests : IAsyncDisposable
         _stop.Dispose();
     }
 
+    // Phase 6, issue 05: the actor crashed on the Pi when a timer fell due between the check and
+    // the wait, giving Task.Delay a negative time. The wait is never negative or beyond a timer's range.
+    [Theory]
+    [InlineData(-1, 0)]
+    [InlineData(-5000, 0)]
+    [InlineData(0, 0)]
+    [InlineData(1, 1)]
+    [InlineData(1500, 1500)]
+    public void A_timer_wait_is_never_negative(int dueInMs, int expectedMs)
+    {
+        var now = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var wait = LobbyActor.WaitUntil(now.AddMilliseconds(dueInMs), now);
+        Assert.Equal(TimeSpan.FromMilliseconds(expectedMs), wait);
+        _ = Task.Delay(wait, CancellationToken.None);
+    }
+
+    [Fact]
+    public void A_far_off_timer_waits_at_most_a_day()
+    {
+        var now = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        Assert.Equal(TimeSpan.FromDays(1), LobbyActor.WaitUntil(now.AddDays(400), now));
+    }
+
     // Phase 6, issue 05: every input and every command reaches the trace, in order. The owner's own
     // chat is traced as an input only, so its text never reaches the trace as a Say.
     [Fact]
