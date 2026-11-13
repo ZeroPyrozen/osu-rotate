@@ -1,0 +1,19 @@
+id,severity,category,status,component,files,summary,fix_commit,tests,notes
+BUG-01,high,functional,fixed,"Lobby lifecycle, Bancho parser",src/OsuRotate.Application/LobbyLifecycle.cs;src/OsuRotate.Infrastructure/Bancho/BanchoParser.cs;src/OsuRotate.Infrastructure/Bancho/BanchoIrcTransport.cs,A room Bancho refuses to make leaves the lobby in Creating for good,3c3234f,"LobbyLifecycleTests, BanchoParserTests, BanchoIrcTransportTests",Refusal text matched on its opening words; not yet seen live
+BUG-02,medium,functional,fixed,Lobby lifecycle,src/OsuRotate.Application/LobbyLifecycle.cs,A refused IRC login is invisible on the dashboard,3c3234f,LobbyLifecycleTests,
+BUG-03,medium,reliability,fixed,Beatmap catalog,src/OsuRotate.Infrastructure/OsuApi/OsuBeatmapCatalog.cs,The beatmap cache grows for as long as the bot runs,b1ef931,OsuApiTests,
+BUG-04,low,edge-case,fixed,osu! API client,src/OsuRotate.Infrastructure/OsuApi/OsuApiClient.cs,A Retry-After date in the past throws,b1ef931,OsuApiTests,Test seen failing before the fix
+BUG-05,high,reliability,fixed,Bancho IRC transport,src/OsuRotate.Infrastructure/Bancho/BanchoIrcTransport.cs,An unexpected error in a Bancho session stops the connection for good,7d82865,BanchoIrcTransportTests,Test seen failing before the fix; not seen in production
+BUG-06,low,functional,fixed,Lobby actor,src/OsuRotate.Application/LobbyActor.cs,Close when everyone has left does nothing in an already empty room,ccb412f,LobbyActorTests,Test seen failing before the fix
+BUG-07,medium,functional,fixed,Rules form,src/OsuRotate.Web/Components/Lobby/RulesPanel.razor,Saving the rules silently undoes changes made in the lobby,a86d53a,RuleEditingTests,
+BUG-08,medium,usability,fixed,Lobby page,src/OsuRotate.Web/Bot/LobbyHostService.cs;src/OsuRotate.Web/Components/Lobby/LobbyView.razor,A bot with no Bancho login gives no hint on the dashboard,a86d53a,"LobbyViewTests, HardeningTests",
+BUG-09,low,usability,fixed,Lobby page,src/OsuRotate.Web/Components/Lobby/LobbyView.razor;src/OsuRotate.Web/Components/Lobby/PlayerRoster.razor,Status text that is wrong with no room; player count ignores the kept size,a86d53a,LobbyViewTests,
+BUG-10,low,layout,fixed,Stylesheet,src/OsuRotate.Web/wwwroot/app.css,The rules form spills out of its card on a phone,a86d53a,Checked in a 375 px viewport,
+OPEN-01,low,usability,open,Dashboard chat,src/OsuRotate.Infrastructure/Bancho/BanchoCommandFormatter.cs,A dashboard chat line starting with ! is sent with a Bot: prefix but shown as typed,,,Owner decision
+OPEN-02,low,security,open,Login,src/OsuRotate.Web/Auth/OwnerAuthentication.cs,A tab already open keeps working after signing out elsewhere,,,Blazor Server circuit behaviour
+OPEN-03,low,integration,open,osu! API client,src/OsuRotate.Infrastructure/OsuApi/OsuApiClient.cs,A refused token is asked for again on every lookup,,,
+OPEN-04,low,edge-case,open,Lobby actor,src/OsuRotate.Application/LobbyActor.cs,A match-history read for one room can reach the next room,,,
+OPEN-05,low,edge-case,open,Lobby engine,src/OsuRotate.Domain/LobbyEngine.cs,Commands queued before an exception go out with the next event,,,
+OPEN-06,info,integration,open,Lobby lifecycle,src/OsuRotate.Application/LobbyLifecycle.cs,A room made just as the connection drops is orphaned,,,
+OPEN-07,info,usability,open,Chat panel,src/OsuRotate.Web/Components/Lobby/ChatPanel.razor,Chat times are in the server time zone,,,
+OPEN-08,info,usability,open,Lobby page,src/OsuRotate.Application/LobbySnapshot.cs,"The current map is shown as a number, not a title",,,
