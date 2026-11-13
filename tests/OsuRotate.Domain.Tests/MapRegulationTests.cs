@@ -237,6 +237,107 @@ public class MapRegulationTests
             lobby.PickMap(id);
         }
 
+        // Phase 6, issue 05, room 122155463: after a restart the bot had no accepted map, an
+        // off-mode pick could not be reverted, and "start when everyone is ready" started it.
+        private static LobbyHarness WithRejectedFirstPick()
+        {
+            var lobby = Create(new MapRegulation { Mode = GameMode.Osu });
+            lobby.Beatmaps[100] = new BeatmapLookup(BeatmapLookupOutcome.ModeMismatch);
+            lobby.PickMap(100);
+            Assert.True(lobby.Engine.CurrentMapRejected);
+            lobby.Sent.Clear();
+            return lobby;
+        }
+
+        [Fact]
+        public void Everyone_ready_does_not_start_a_rejected_map()
+        {
+            var lobby = WithRejectedFirstPick();
+            lobby.Feed(new AllPlayersReady());
+            Assert.Equal(0, lobby.SentCount<StartMatch>());
+            Assert.Contains(lobby.Said, s => s.Contains("does not fit the rules, so the match was not started", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void The_hosts_start_command_does_not_start_a_rejected_map()
+        {
+            var lobby = WithRejectedFirstPick();
+            lobby.Chat(lobby.Engine.Room.Host!.Name, "!start");
+            Assert.Equal(0, lobby.SentCount<StartMatch>());
+        }
+
+        [Fact]
+        public void A_rejected_map_started_from_the_client_is_aborted()
+        {
+            var lobby = WithRejectedFirstPick();
+            lobby.Feed(new MatchStarted());
+            Assert.Equal(1, lobby.SentCount<AbortMatch>());
+            Assert.Contains(lobby.Said, s => s.Contains("so the match was aborted", StringComparison.Ordinal));
+            Assert.Equal(0, lobby.Engine.LastAcceptedMapId);
+        }
+
+        [Fact]
+        public void The_owner_can_still_start_a_rejected_map()
+        {
+            var fromChat = WithRejectedFirstPick();
+            fromChat.Chat("creator", "*start");
+            Assert.Equal(1, fromChat.SentCount<StartMatch>());
+            Assert.Equal(0, fromChat.SentCount<AbortMatch>());
+
+            var fromDashboard = WithRejectedFirstPick();
+            fromDashboard.Run(() => fromDashboard.Engine.ForceStart(0));
+            Assert.Equal(1, fromDashboard.SentCount<StartMatch>());
+            Assert.Equal(0, fromDashboard.SentCount<AbortMatch>());
+        }
+
+        [Fact]
+        public void A_good_pick_after_a_rejected_one_starts_as_usual()
+        {
+            var lobby = WithRejectedFirstPick();
+            Pick(lobby, 200);
+            Assert.False(lobby.Engine.CurrentMapRejected);
+            lobby.Feed(new AllPlayersReady());
+            Assert.Equal(1, lobby.SentCount<StartMatch>());
+        }
+
+        [Fact]
+        public void After_a_restart_the_rooms_map_is_checked_and_becomes_the_one_to_revert_to()
+        {
+            var lobby = Create(new MapRegulation { Mode = GameMode.Osu });
+            lobby.Feed(new RoomStateReceived(new RoomState("room", 1, 50, "title 50", "HeadToHead", "Score", string.Empty, [])));
+            Assert.Equal(50, Assert.Single(lobby.Sent.OfType<LookUpBeatmap>()).BeatmapId);
+            Assert.Equal(50, lobby.Engine.LastAcceptedMapId);
+            Assert.Empty(lobby.Said);
+
+            lobby.Beatmaps[100] = new BeatmapLookup(BeatmapLookupOutcome.ModeMismatch);
+            lobby.PickMap(100);
+            Assert.Equal(50, lobby.Sent.OfType<SetBeatmap>().Last().BeatmapId);
+            Assert.False(lobby.Engine.CurrentMapRejected);
+        }
+
+        [Fact]
+        public void After_a_restart_a_rooms_map_that_breaks_the_rules_is_not_started()
+        {
+            var lobby = Create(new MapRegulation { Mode = GameMode.Osu });
+            lobby.Beatmaps[50] = new BeatmapLookup(BeatmapLookupOutcome.ModeMismatch);
+            lobby.Feed(new RoomStateReceived(new RoomState("room", 1, 50, "title 50", "HeadToHead", "Score", string.Empty, [])));
+            Assert.Equal(0, lobby.Engine.LastAcceptedMapId);
+            Assert.True(lobby.Engine.CurrentMapRejected);
+
+            lobby.Feed(new AllPlayersReady());
+            Assert.Equal(0, lobby.SentCount<StartMatch>());
+        }
+
+        [Fact]
+        public void A_room_state_with_a_known_map_is_not_looked_up_again()
+        {
+            var lobby = Create(new MapRegulation());
+            Pick(lobby, 50);
+            var lookups = lobby.SentCount<LookUpBeatmap>();
+            lobby.Feed(new RoomStateReceived(new RoomState("room", 1, 50, "title 50", "HeadToHead", "Score", string.Empty, [])));
+            Assert.Equal(lookups, lobby.SentCount<LookUpBeatmap>());
+        }
+
         [Fact]
         public void An_ordinary_map_passes_by_default()
         {
