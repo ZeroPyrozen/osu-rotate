@@ -1,6 +1,6 @@
 # Deploy script tests on Linux
 
-Status: in-progress
+Status: done
 
 `deploy/tests/pi-install.test.sh` fails 11 checks on Windows (Git Bash), with or without recent
 changes: it expects Linux symlinks and tools. It has to pass before the first real deploy, because

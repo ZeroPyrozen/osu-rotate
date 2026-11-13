@@ -36,7 +36,7 @@ if (!app.Environment.IsDevelopment())
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 
-// No HTTPS redirection: Kestrel is on loopback and Cloudflare terminates TLS (and redirects HTTP).
+// No HTTPS redirection: Kestrel is on loopback and tailscale serve terminates TLS.
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
