@@ -10,11 +10,15 @@ Then checks, and records here:
 - The service starts and `/healthz` answers. How long from `systemctl restart` to healthy.
 - Memory after start (`systemctl status osu-rotate`), against `MemoryMax=768M`.
 - The journal: the warnings it gives at start, and nothing unexpected.
-- Logging in at `https://<hostname>`: the owner gets in; a second osu! account gets "This
+- The osu! login page's `redirect_uri` is `https://<machine>.<tailnet>.ts.net:8443/signin-osu`
+  (Tailscale's source says serve keeps `Host` and sends `X-Forwarded-Proto: https`).
+- Logging in at `https://<machine>.<tailnet>.ts.net[:port]`: the owner gets in; a second osu! account gets "This
   dashboard is for its owner only."; signing out works.
 - In the browser's developer tools: no CSP violations on the lobby and history pages, the
   `osu-rotate` cookie is Secure and HttpOnly, and `Strict-Transport-Security` is sent.
-- A request with another Host header through the tunnel (if Cloudflare lets one through) gets 400.
+- A request to the Pi's Tailscale IP instead of its name gets 400 (not an allowed host).
+- From a device that isn't on the tailnet (a phone on mobile data, Tailscale off), port 8443
+  doesn't answer at all, although 443 on the same name is public through Funnel.
 - A rollback (`-Rollback`) and a deploy back again both work.
 
 Done when every check above is recorded as seen, or has its own fix issue.

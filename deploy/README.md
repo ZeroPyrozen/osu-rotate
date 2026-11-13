@@ -31,8 +31,8 @@ stops with exit code 2 and says so. CI runs it on Ubuntu and on Debian 13 for ev
 | Follow logs | `ssh pi@raspberrypi.local journalctl -u osu-rotate -f` |
 | See what's deployed | `ssh pi@raspberrypi.local readlink /opt/osu-rotate/current` |
 
-The service listens on `127.0.0.1:5180` only. To see the page from your PC before the Cloudflare
-Tunnel exists, forward the port and open <http://localhost:5180>:
+The service listens on `127.0.0.1:5180` only. To see the page from your PC before `tailscale serve`
+is set up, forward the port and open <http://localhost:5180>:
 
 ```powershell
 ssh -L 5180:127.0.0.1:5180 pi@raspberrypi.local
@@ -64,45 +64,77 @@ sudo systemctl restart osu-rotate
 | `Bancho__Nick`, `Bancho__Password` | Your osu! username and IRC password. Without both, the bot stays Idle and does not connect. |
 | `Osu__ClientId`, `Osu__ClientSecret` | An osu! OAuth application, for map checks, recovery and the dashboard login. Without it, maps are let through and nobody can log in. |
 | `Dashboard__OwnerUserId` | Your osu! user id. Only this account may use the dashboard. |
-| `Dashboard__Host` | The dashboard's public hostname, for example `rotate.example.com`. Other hostnames get 400 Bad Request. |
+| `Dashboard__Host` | The Pi's Tailscale name, `<machine>.<tailnet>.ts.net`, without `https://` or port. Other hostnames get 400 Bad Request. |
 
 The journal says which are missing when the service starts (`journalctl -u osu-rotate`).
 On a restart, the bot rejoins the room it had open and restores the queue.
 
 ## Setting up the dashboard login
 
-The dashboard is reached through a Cloudflare Tunnel at a hostname of your own, for example
-`rotate.example.com` (use yours wherever this section says that). Only your osu! account can use it.
+The dashboard is only on your tailnet: `tailscale serve` on the Pi gives it an HTTPS address that
+only your own Tailscale devices can open, and only your osu! account can log in
+(`docs/adr/0001-tailscale-instead-of-cloudflare-tunnel.md`). Nothing is reachable from the internet.
 
-### 1. Create the osu! OAuth application
+Below, `<name>` is the Pi's Tailscale name, `<machine>.<tailnet>.ts.net`, and `<port>` the HTTPS
+port you pick in step 1. Keep both out of this repo; they belong only on the Pi and in osu!.
+
+### 1. Serve the dashboard on your tailnet
+
+Your tailnet needs MagicDNS and HTTPS certificates turned on (Tailscale admin console, **DNS**).
+On the Pi:
+
+```bash
+tailscale status          # the Pi is on your tailnet; install Tailscale first if it isn't
+tailscale serve status    # what the Pi already serves
+```
+
+Pick the port. If `tailscale serve status` shows nothing on `:443`, use 443 and the address is
+`https://<name>`. If another app already has 443, use another port such as 8443, and the address
+is `https://<name>:8443`.
+
+```bash
+sudo tailscale serve --bg --https=<port> http://127.0.0.1:5180
+```
+
+If `tailscaled` runs rootless as your own user (userspace networking), leave out `sudo` and point
+the CLI at your daemon's socket, for example
+`~/.local/bin/tailscale --socket=/run/user/1000/tailscaled.sock serve ...`.
+
+`--bg` keeps it after reboots. Don't use `tailscale funnel` on this port, which would publish the
+dashboard to the internet. Funnel is set per port, so another site on the same name can stay public. To stop serving it: `sudo tailscale serve --https=<port> off`.
+
+### 2. Create the osu! OAuth application
 
 1. Sign in at osu.ppy.sh and open <https://osu.ppy.sh/home/account/edit#oauth>.
 2. Under **OAuth**, choose **New OAuth Application**.
 3. Give it a name, for example `osu-rotate`.
-4. Set **Application Callback URLs** to exactly `https://rotate.example.com/signin-osu`.
-   It must be `https`, with no port and no trailing slash.
+4. Set **Application Callback URLs** to exactly the dashboard's address plus `/signin-osu`:
+   `https://<name>/signin-osu` on port 443, or `https://<name>:<port>/signin-osu` on any other.
+   No trailing slash.
 5. Choose **Register application**. Keep the page open: it shows the **Client ID** and
    **Client Secret**. The secret stays on that page; never paste it anywhere but the Pi.
 
-The same application serves the bot's map checks, so you need only one.
+osu! never has to reach your tailnet: it only sends your browser to that address after you
+approve. The same application serves the bot's map checks, so you need only one.
 
-### 2. Find your osu! user id
+### 3. Find your osu! user id
 
 Open your osu! profile. The number in the address, `https://osu.ppy.sh/users/<number>`, is your id.
 
-### 3. Put the settings on the Pi
+### 4. Put the settings on the Pi
 
 ```bash
 sudo nano /etc/osu-rotate/secrets.env
 ```
 
-Set these four lines (remove the `#` in front of each):
+Set these four lines (remove the `#` in front of each). `Dashboard__Host` is the name only, with
+no `https://` and no port:
 
 ```bash
 Osu__ClientId=<Client ID>
 Osu__ClientSecret=<Client Secret>
 Dashboard__OwnerUserId=<your user id>
-Dashboard__Host=rotate.example.com
+Dashboard__Host=<machine>.<tailnet>.ts.net
 ```
 
 Then restart:
@@ -111,27 +143,24 @@ Then restart:
 sudo systemctl restart osu-rotate
 ```
 
-### 4. Point the tunnel at the service
-
-In the Cloudflare Tunnel's public hostname for `rotate.example.com`, set the service to
-`http://127.0.0.1:5180`. Leave **HTTP Host Header** empty, so the app sees `rotate.example.com`.
-
-The app trusts the tunnel's `X-Forwarded-Proto` and `X-Forwarded-For` headers only when they come
-from this machine. That is how it knows the visitor used HTTPS, and builds the callback URL with
-`https://`. Run `cloudflared` on the Pi itself; if it ran elsewhere, logins would fail.
+The app trusts the proxy's `X-Forwarded-Proto` and `X-Forwarded-For` headers only when they come
+from the Pi itself, which is where `tailscale serve` connects from. That is how it knows you used
+HTTPS, and builds the callback URL with `https://`.
 
 ### 5. Log in
 
-Open `https://rotate.example.com`. You are sent to osu! to approve the application, then back to
-the dashboard. Anyone else who logs in gets "This dashboard is for its owner only." and no session.
+From a device on your tailnet, open the address from step 1. You are sent to osu! to approve the
+application, then back to the dashboard. Anyone else who logs in gets "This dashboard is for its
+owner only." and no session.
 
 If something goes wrong:
 
 | What you see | What to check |
 | --- | --- |
+| The page doesn't load at all | This device isn't on your tailnet, or `tailscale serve status` doesn't show the port. |
 | "osu! login is not set up." | One of `Osu__ClientId`, `Osu__ClientSecret` or `Dashboard__OwnerUserId` is missing. |
-| osu! says the redirect URI is invalid | The callback URL in step 1 must match `https://<Dashboard__Host>/signin-osu` exactly. |
-| 400 Bad Request on every page | `Dashboard__Host` doesn't match the hostname in the address bar. |
+| osu! says the redirect URI is invalid | The callback in step 2 must match the address in the browser plus `/signin-osu`, port included. |
+| 400 Bad Request on every page | `Dashboard__Host` doesn't match the name in the address bar. |
 | "The osu! login did not complete." | Usually the client secret is wrong, or the login took too long. Try again. |
 
 ### What the app does to stay safe

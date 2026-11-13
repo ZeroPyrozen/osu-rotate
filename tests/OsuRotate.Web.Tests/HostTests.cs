@@ -58,7 +58,7 @@ public sealed class BotFactory : WebApplicationFactory<Program>
 
     private string _environment = "Development";
 
-    // The address requests come from; TestServer has none. Loopback is cloudflared on the Pi.
+    // The address requests come from; TestServer has none. Loopback is tailscale serve on the Pi.
     public IPAddress? RemoteAddress { get; set; }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

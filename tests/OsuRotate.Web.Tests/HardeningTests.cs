@@ -13,7 +13,8 @@ using OsuRotate.Web.Hosting;
 
 namespace OsuRotate.Web.Tests;
 
-// Phase 5, issue 08: the host as it runs on the Pi, behind Cloudflare Tunnel.
+// Phase 5, issue 08: the host as it runs on the Pi, behind a proxy on the same machine
+// (tailscale serve, ADR 0001).
 public sealed partial class HardeningTests : IDisposable
 {
     private const string PublicHost = "rotate.example.com";
@@ -45,7 +46,7 @@ public sealed partial class HardeningTests : IDisposable
         System.Web.HttpUtility.ParseQueryString(challenge.Headers.Location!.Query)["redirect_uri"]!;
 
     [Fact]
-    public async Task Https_from_cloudflared_on_loopback_is_trusted()
+    public async Task Https_from_the_proxy_on_loopback_is_trusted()
     {
         _factory.RemoteAddress = IPAddress.Loopback;
         var challenge = await GetAsync(Client($"http://{PublicHost}"), "/", forwardedProto: "https");

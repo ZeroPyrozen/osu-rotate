@@ -59,7 +59,7 @@ public static partial class OwnerAuthentication
                 options.Cookie.HttpOnly = true;
                 options.Cookie.SameSite = SameSiteMode.Lax;
 
-                // Cloudflare serves the dashboard over HTTPS; local development runs on plain HTTP.
+                // tailscale serve gives the dashboard HTTPS; local development runs on plain HTTP.
                 options.Cookie.SecurePolicy = environment.IsDevelopment() ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
                 options.ExpireTimeSpan = TimeSpan.FromDays(7);
                 options.SlidingExpiration = true;

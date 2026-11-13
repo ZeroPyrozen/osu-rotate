@@ -14,7 +14,7 @@ Group=osu-rotate
 WorkingDirectory=/opt/osu-rotate/current
 ExecStart=/opt/osu-rotate/current/OsuRotate.Web
 Environment=ASPNETCORE_ENVIRONMENT=Production
-# Loopback only: the dashboard is reached through Cloudflare Tunnel. pi-install.sh health-checks this port.
+# Loopback only: the dashboard is reached through tailscale serve. pi-install.sh health-checks this port.
 Environment=ASPNETCORE_URLS=http://127.0.0.1:5180
 Environment=DataProtection__KeysPath=/var/lib/osu-rotate/keys
 EnvironmentFile=/etc/osu-rotate/secrets.env

@@ -5,8 +5,8 @@ using Microsoft.AspNetCore.Server.Kestrel.Core;
 
 namespace OsuRotate.Web.Hosting;
 
-// Production settings for running behind Cloudflare Tunnel: cloudflared on the same machine is the
-// only proxy, the dashboard's public hostname comes from configuration, and every response carries
+// Production settings for running behind `tailscale serve` (ADR 0001): Tailscale on the same
+// machine is the only proxy, the dashboard's public hostname comes from configuration, and every response carries
 // a content security policy.
 public static class Hardening
 {
@@ -26,7 +26,7 @@ public static class Hardening
 
         builder.Services.Configure<ForwardedHeadersOptions>(options =>
         {
-            // cloudflared keeps the Host header and adds X-Forwarded-For and X-Forwarded-Proto. Only
+            // The proxy adds X-Forwarded-For and X-Forwarded-Proto; the Host header is not forwarded. Only
             // trust them from this machine; anything else could claim to be HTTPS or any address.
             options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
             options.ForwardLimit = 1;
@@ -53,7 +53,7 @@ public static class Hardening
         return builder;
     }
 
-    // The dashboard's public hostname, as Cloudflare serves it (Dashboard:Host), without scheme or port.
+    // The dashboard's hostname on the tailnet (Dashboard:Host), without scheme or port.
     public static string? PublicHost(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
@@ -69,12 +69,12 @@ public static class Hardening
 
         if (PublicHost(app.Configuration) is null && !app.Environment.IsDevelopment())
         {
-            app.Logger.LogWarning("Dashboard__Host is not set, so the dashboard only answers on localhost. Set it to the hostname Cloudflare serves it on.");
+            app.Logger.LogWarning("Dashboard__Host is not set, so the dashboard only answers on localhost. Set it to the Pi's Tailscale name (<machine>.<tailnet>.ts.net).");
         }
 
         if (!app.Environment.IsDevelopment())
         {
-            // Sent only on HTTPS requests, which through the tunnel means X-Forwarded-Proto: https.
+            // Sent only on HTTPS requests, which through the proxy means X-Forwarded-Proto: https.
             app.UseHsts();
         }
 
