@@ -42,7 +42,7 @@ public sealed partial class OwnerLoginTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, page.StatusCode);
         var html = await page.Content.ReadAsStringAsync();
         Assert.Contains("<h1>Log in</h1>", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"/signin/osu?returnUrl=%2Fhistory\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"/signin/osu?returnUrl=%2Fhistory\" data-enhance-nav=\"false\"", html, StringComparison.Ordinal);
         Assert.Contains("Log in with osu!", html, StringComparison.Ordinal);
         Assert.DoesNotContain("blazor-error-ui", html, StringComparison.Ordinal);
     }
