@@ -1,13 +1,14 @@
 @using System.Globalization
 @using OsuRotate.Application
 @using OsuRotate.Domain
+@using OsuRotate.Web.Bot
+@inject LobbyRuntime Runtime
 
 @* Renders one snapshot. Everything from players and Bancho is shown as text, never as markup. *@
 
 <section class="lobby-status" aria-label="Lobby status" data-status="@Status" data-connected="@(Snapshot?.Connected == true ? "yes" : "no")">
     <p>Lobby status: <strong>@Status</strong></p>
     <p class="connection">Bancho: <strong>@(Snapshot?.Connected == true ? "connected" : "not connected")</strong></p>
-
     @if (Snapshot is null)
     {
         <p>The bot is starting.</p>
@@ -24,101 +25,34 @@
         {
             <p class="room">No room open.</p>
         }
-
         @if (Snapshot.ClosingWhenEmpty)
         {
             <p class="closing">Closing once everyone has left.</p>
         }
-
-        <p class="match">
-            @(Snapshot.IsMatching ? "A match is being played." : Snapshot.CountdownRunning ? "The match start countdown is running." : "Waiting for the host.")
-            @if (Snapshot.BeatmapId > 0)
-            {
-                <span> Map: <a href="@MapUrl(Snapshot.BeatmapId)" target="_blank" rel="noopener noreferrer">#@Snapshot.BeatmapId</a></span>
-            }
-        </p>
+        @* What the match is doing only means something in a room the bot is in. *@
+        @if (Snapshot.Status == LobbyStatus.Open)
+        {
+            <p class="match">
+                @(Snapshot.IsMatching ? "A match is being played." : Snapshot.CountdownRunning ? "The match start countdown is running." : "Waiting for the host.")
+                @if (Snapshot.BeatmapId > 0)
+                {
+                    <span> Map: <a href="@MapUrl(Snapshot.BeatmapId)" target="_blank" rel="noopener noreferrer">#@Snapshot.BeatmapId</a></span>
+                }
+            </p>
+        }
     }
 </section>
 
-@if (Snapshot is not null)
+@if (Runtime.Problem is { } problem)
 {
-    <section class="lobby-queue" aria-label="Host queue">
-        <h2>Queue</h2>
-        @if (Snapshot.Queue.Count == 0)
-        {
-            <p>Nobody is queued.</p>
-        }
-        else
-        {
-            <ol>
-                @foreach (var name in Snapshot.Queue)
-                {
-                    <li class="@(name == Snapshot.Host ? "host" : null)">
-                        @name
-                        @if (name == Snapshot.Host)
-                        {
-                            <span class="tag"> (host)</span>
-                        }
-                    </li>
-                }
-            </ol>
-        }
-    </section>
-
-    <section class="lobby-players" aria-label="Players">
-        <h2>Players (@Snapshot.Players.Count/16)</h2>
-        @if (Snapshot.Players.Count == 0)
-        {
-            <p>The room is empty.</p>
-        }
-        else
-        {
-            <div class="table-scroll">
-            <table>
-                <thead>
-                    <tr><th>Slot</th><th>Player</th><th>Team</th><th>State</th></tr>
-                </thead>
-                <tbody>
-                    @foreach (var player in Snapshot.Players)
-                    {
-                        <tr>
-                            <td>@player.Slot</td>
-                            <td>
-                                @if (player.OsuUserId is { } id)
-                                {
-                                    <a href="@UserUrl(id)" target="_blank" rel="noopener noreferrer">@player.Name</a>
-                                }
-                                else
-                                {
-                                    @player.Name
-                                }
-                                @if (player.Name == Snapshot.Host)
-                                {
-                                    <span class="tag"> (host)</span>
-                                }
-                                @if (Snapshot.Referees.Contains(PlayerKey(player.Name)))
-                                {
-                                    <span class="tag"> (referee)</span>
-                                }
-                            </td>
-                            <td>@(player.Team == Team.None ? "-" : player.Team.ToString())</td>
-                            <td><span class="state @player.Status.ToString().ToLowerInvariant()">@StateText(player.Status)</span></td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-            </div>
-        }
-    </section>
-
-    @if (Snapshot.Referees.Count > 0)
-    {
-        <section class="lobby-referees" aria-label="Referees">
-            <h2>Referees</h2>
-            <p>@string.Join(", ", Snapshot.Referees)</p>
-        </section>
-    }
+    <p class="status-note problem" role="alert">@problem</p>
 }
+else if (StatusHelp(Snapshot) is { } help)
+{
+    <p class="status-note" role="status">@help</p>
+}
+
+<PlayerRoster Snapshot="Snapshot" />
 
 @code {
     [Parameter]
@@ -126,19 +60,25 @@
 
     private string Status => Snapshot?.Status.ToString() ?? LobbyStatus.Idle.ToString();
 
+    // One plain sentence for every state that is not simply "open", so a status word like
+    // "Syncing" never has to be guessed at.
+    public static string? StatusHelp(LobbySnapshot? snapshot) => snapshot switch
+    {
+        null => null,
+        { Status: LobbyStatus.Open } => null,
+        { Status: LobbyStatus.Idle, RoomId: not null } => "The bot is not connected to Bancho, so it is not in its room.",
+        { Status: LobbyStatus.Idle, Connected: true } => "No room is open. Create one below, or attach to a room you already made in the game.",
+        { Status: LobbyStatus.Idle } => "The bot is not connected to Bancho yet. You can create a room now; it opens as soon as the bot is connected.",
+        { Status: LobbyStatus.Connecting } => "Connecting to Bancho. The room opens as soon as the bot is connected.",
+        { Status: LobbyStatus.Creating } => "Asking Bancho for a new room.",
+        { Status: LobbyStatus.Rejoining } => "Joining the room.",
+        { Status: LobbyStatus.Syncing } => "Reading who is in the room.",
+        { Status: LobbyStatus.Reconnecting } => "Bancho dropped the connection. The bot is reconnecting and will go back into the room.",
+        { Status: LobbyStatus.Closing } => "Closing the room.",
+        _ => null,
+    };
+
     private static string RoomUrl(long roomId) => string.Create(CultureInfo.InvariantCulture, $"https://osu.ppy.sh/mp/{roomId}");
 
     private static string MapUrl(int beatmapId) => string.Create(CultureInfo.InvariantCulture, $"https://osu.ppy.sh/b/{beatmapId}");
-
-    private static string UserUrl(int userId) => string.Create(CultureInfo.InvariantCulture, $"https://osu.ppy.sh/users/{userId}");
-
-    private static string PlayerKey(string name) => Player.KeyOf(name);
-
-    private static string StateText(MatchStatus status) => status switch
-    {
-        MatchStatus.Playing => "playing",
-        MatchStatus.Finished => "finished",
-        MatchStatus.InLobby => "in lobby",
-        _ => "-",
-    };
 }

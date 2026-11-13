@@ -18,6 +18,25 @@ public class RuleEditingTests
     public class Form
     {
         [Fact]
+        public void A_form_knows_when_it_has_been_edited()
+        {
+            var form = RuleForm.From(Defaults);
+            var pristine = form.Clone();
+            Assert.True(form.SameAs(pristine));
+
+            form.StarMax = 6.5;
+            Assert.False(form.SameAs(pristine));
+            Assert.Equal(0, pristine.StarMax);
+
+            form.StarMax = 0;
+            Assert.True(form.SameAs(pristine));
+
+            // A typed password is an edit too, though it is never loaded from the lobby.
+            form.NewPassword = "x";
+            Assert.False(form.SameAs(pristine));
+        }
+
+        [Fact]
         public void An_untouched_form_gives_back_the_same_rules()
         {
             var settings = Defaults with
@@ -255,6 +274,39 @@ public class RuleEditingTests
             Assert.Contains("type=\"password\"", html, StringComparison.Ordinal);
             Assert.DoesNotContain("hunter2", html, StringComparison.Ordinal);
             Assert.Contains("placeholder=\"unchanged\"", html, StringComparison.Ordinal);
+        }
+
+        // The form used to be filled once. Rules changed in the lobby afterwards (the owner typing
+        // *regulation in chat, or saving from another tab) never reached it, and the next save
+        // from this page put the old values back.
+        [Fact]
+        public async Task An_untouched_form_follows_rules_changed_in_the_lobby()
+        {
+            await using var lobby = new TestLobby();
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.AddSingleton(lobby.Runtime);
+            await using var provider = services.BuildServiceProvider();
+            await using var renderer = new HtmlRenderer(provider, provider.GetRequiredService<ILoggerFactory>());
+            var page = await renderer.Dispatcher.InvokeAsync(() => renderer.RenderComponentAsync<OsuRotate.Web.Components.Pages.Rules>());
+            string Html() => renderer.Dispatcher.InvokeAsync(page.ToHtmlString).Result;
+            Assert.DoesNotContain("value=\"6.5\"", Html(), StringComparison.Ordinal);
+            Assert.Contains("No changes", Html(), StringComparison.Ordinal);
+
+            var changed = lobby.Snapshot.Settings with { Regulation = lobby.Snapshot.Settings.Regulation with { StarMax = 6.5 } };
+            await lobby.Actor.PostAsync(new ChangeSettings(changed));
+
+            await TestLobby.WaitUntilAsync(() => Html().Contains("value=\"6.5\"", StringComparison.Ordinal));
+            Assert.DoesNotContain("The rules were changed in the lobby", Html(), StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task The_save_bar_says_there_is_nothing_to_save_until_something_changes()
+        {
+            var html = await RenderAsync(Defaults);
+            Assert.Contains("data-dirty=\"no\"", html, StringComparison.Ordinal);
+            Assert.Contains("No changes", html, StringComparison.Ordinal);
+            Assert.Matches("<button type=\"submit\" disabled[^>]*>Save rules</button>", html);
         }
 
         [Fact]

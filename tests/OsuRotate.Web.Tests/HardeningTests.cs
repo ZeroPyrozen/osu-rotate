@@ -209,13 +209,35 @@ public sealed partial class HardeningTests : IDisposable
             }
         }
 
-        var html = await browser.GetStringAsync(new Uri("/", UriKind.Relative));
+        // The lobby page and the rules page, each with its forms and the sign-out form.
+        var html = await browser.GetStringAsync(new Uri("/", UriKind.Relative)) + await browser.GetStringAsync(new Uri("/rules", UriKind.Relative));
         var forms = Form().Matches(html).ToList();
-        Assert.True(forms.Count >= 5, $"Only {forms.Count} forms rendered.");
+        Assert.True(forms.Count >= 6, $"Only {forms.Count} forms rendered.");
 
-        var posting = Assert.Single(forms, f => f.Groups["attributes"].Value.Contains("method=", StringComparison.Ordinal));
-        Assert.Contains("method=\"post\" action=\"signout\"", posting.Groups["attributes"].Value, StringComparison.Ordinal);
-        Assert.Contains("name=\"__RequestVerificationToken\"", posting.Value, StringComparison.Ordinal);
+        var posting = forms.Where(f => f.Groups["attributes"].Value.Contains("method=", StringComparison.Ordinal)).ToList();
+        Assert.Equal(2, posting.Count);
+        Assert.All(posting, form =>
+        {
+            Assert.Contains("method=\"post\" action=\"signout\"", form.Groups["attributes"].Value, StringComparison.Ordinal);
+            Assert.Contains("name=\"__RequestVerificationToken\"", form.Value, StringComparison.Ordinal);
+        });
+    }
+
+    // The test host has no Bancho login, like a Pi whose environment file was never filled in.
+    [Fact]
+    public async Task A_bot_with_no_bancho_login_says_so_on_the_dashboard()
+    {
+        var (browser, _) = await _factory.LogInAsync();
+        using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
+        {
+            while (_factory.Runtime.Actor is null)
+            {
+                await Task.Delay(10, timeout.Token);
+            }
+        }
+
+        Assert.Equal(OsuRotate.Web.Bot.LobbyHostService.NotConfigured, _factory.Runtime.Problem);
+        Assert.Contains("The bot has no Bancho login", await browser.GetStringAsync(new Uri("/", UriKind.Relative)), StringComparison.Ordinal);
     }
 
     // The interactive panels only render once the circuit is up, so this reads their source: a form

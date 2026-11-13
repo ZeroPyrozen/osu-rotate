@@ -1,0 +1,280 @@
+{
+  "repository": "osu-rotate",
+  "audited_commit": "db6e9df",
+  "date": "2026-11-13",
+  "tests": {
+    "before": 1426,
+    "after": 1452,
+    "failing": 0
+  },
+  "vulnerable_packages": 0,
+  "branches": {
+    "audit-bug-fixes": [
+      "3c3234f",
+      "b1ef931",
+      "7d82865",
+      "ccb412f"
+    ],
+    "friendlier-dashboard": [
+      "a86d53a"
+    ]
+  },
+  "findings": [
+    {
+      "id": "BUG-01",
+      "severity": "high",
+      "category": "functional",
+      "status": "fixed",
+      "component": "Lobby lifecycle, Bancho parser",
+      "files": [
+        "src/OsuRotate.Application/LobbyLifecycle.cs",
+        "src/OsuRotate.Infrastructure/Bancho/BanchoParser.cs",
+        "src/OsuRotate.Infrastructure/Bancho/BanchoIrcTransport.cs"
+      ],
+      "summary": "A room Bancho refuses to make leaves the lobby in Creating for good",
+      "fix_commit": "3c3234f",
+      "tests": "LobbyLifecycleTests, BanchoParserTests, BanchoIrcTransportTests",
+      "notes": "Refusal text matched on its opening words; not yet seen live"
+    },
+    {
+      "id": "BUG-02",
+      "severity": "medium",
+      "category": "functional",
+      "status": "fixed",
+      "component": "Lobby lifecycle",
+      "files": [
+        "src/OsuRotate.Application/LobbyLifecycle.cs"
+      ],
+      "summary": "A refused IRC login is invisible on the dashboard",
+      "fix_commit": "3c3234f",
+      "tests": "LobbyLifecycleTests",
+      "notes": ""
+    },
+    {
+      "id": "BUG-03",
+      "severity": "medium",
+      "category": "reliability",
+      "status": "fixed",
+      "component": "Beatmap catalog",
+      "files": [
+        "src/OsuRotate.Infrastructure/OsuApi/OsuBeatmapCatalog.cs"
+      ],
+      "summary": "The beatmap cache grows for as long as the bot runs",
+      "fix_commit": "b1ef931",
+      "tests": "OsuApiTests",
+      "notes": ""
+    },
+    {
+      "id": "BUG-04",
+      "severity": "low",
+      "category": "edge-case",
+      "status": "fixed",
+      "component": "osu! API client",
+      "files": [
+        "src/OsuRotate.Infrastructure/OsuApi/OsuApiClient.cs"
+      ],
+      "summary": "A Retry-After date in the past throws",
+      "fix_commit": "b1ef931",
+      "tests": "OsuApiTests",
+      "notes": "Test seen failing before the fix"
+    },
+    {
+      "id": "BUG-05",
+      "severity": "high",
+      "category": "reliability",
+      "status": "fixed",
+      "component": "Bancho IRC transport",
+      "files": [
+        "src/OsuRotate.Infrastructure/Bancho/BanchoIrcTransport.cs"
+      ],
+      "summary": "An unexpected error in a Bancho session stops the connection for good",
+      "fix_commit": "7d82865",
+      "tests": "BanchoIrcTransportTests",
+      "notes": "Test seen failing before the fix; not seen in production"
+    },
+    {
+      "id": "BUG-06",
+      "severity": "low",
+      "category": "functional",
+      "status": "fixed",
+      "component": "Lobby actor",
+      "files": [
+        "src/OsuRotate.Application/LobbyActor.cs"
+      ],
+      "summary": "Close when everyone has left does nothing in an already empty room",
+      "fix_commit": "ccb412f",
+      "tests": "LobbyActorTests",
+      "notes": "Test seen failing before the fix"
+    },
+    {
+      "id": "BUG-07",
+      "severity": "medium",
+      "category": "functional",
+      "status": "fixed",
+      "component": "Rules form",
+      "files": [
+        "src/OsuRotate.Web/Components/Lobby/RulesPanel.razor"
+      ],
+      "summary": "Saving the rules silently undoes changes made in the lobby",
+      "fix_commit": "a86d53a",
+      "tests": "RuleEditingTests",
+      "notes": ""
+    },
+    {
+      "id": "BUG-08",
+      "severity": "medium",
+      "category": "usability",
+      "status": "fixed",
+      "component": "Lobby page",
+      "files": [
+        "src/OsuRotate.Web/Bot/LobbyHostService.cs",
+        "src/OsuRotate.Web/Components/Lobby/LobbyView.razor"
+      ],
+      "summary": "A bot with no Bancho login gives no hint on the dashboard",
+      "fix_commit": "a86d53a",
+      "tests": "LobbyViewTests, HardeningTests",
+      "notes": ""
+    },
+    {
+      "id": "BUG-09",
+      "severity": "low",
+      "category": "usability",
+      "status": "fixed",
+      "component": "Lobby page",
+      "files": [
+        "src/OsuRotate.Web/Components/Lobby/LobbyView.razor",
+        "src/OsuRotate.Web/Components/Lobby/PlayerRoster.razor"
+      ],
+      "summary": "Status text that is wrong with no room; player count ignores the kept size",
+      "fix_commit": "a86d53a",
+      "tests": "LobbyViewTests",
+      "notes": ""
+    },
+    {
+      "id": "BUG-10",
+      "severity": "low",
+      "category": "layout",
+      "status": "fixed",
+      "component": "Stylesheet",
+      "files": [
+        "src/OsuRotate.Web/wwwroot/app.css"
+      ],
+      "summary": "The rules form spills out of its card on a phone",
+      "fix_commit": "a86d53a",
+      "tests": "Checked in a 375 px viewport",
+      "notes": ""
+    },
+    {
+      "id": "OPEN-01",
+      "severity": "low",
+      "category": "usability",
+      "status": "open",
+      "component": "Dashboard chat",
+      "files": [
+        "src/OsuRotate.Infrastructure/Bancho/BanchoCommandFormatter.cs"
+      ],
+      "summary": "A dashboard chat line starting with ! is sent with a Bot: prefix but shown as typed",
+      "fix_commit": "",
+      "tests": "",
+      "notes": "Owner decision"
+    },
+    {
+      "id": "OPEN-02",
+      "severity": "low",
+      "category": "security",
+      "status": "open",
+      "component": "Login",
+      "files": [
+        "src/OsuRotate.Web/Auth/OwnerAuthentication.cs"
+      ],
+      "summary": "A tab already open keeps working after signing out elsewhere",
+      "fix_commit": "",
+      "tests": "",
+      "notes": "Blazor Server circuit behaviour"
+    },
+    {
+      "id": "OPEN-03",
+      "severity": "low",
+      "category": "integration",
+      "status": "open",
+      "component": "osu! API client",
+      "files": [
+        "src/OsuRotate.Infrastructure/OsuApi/OsuApiClient.cs"
+      ],
+      "summary": "A refused token is asked for again on every lookup",
+      "fix_commit": "",
+      "tests": "",
+      "notes": ""
+    },
+    {
+      "id": "OPEN-04",
+      "severity": "low",
+      "category": "edge-case",
+      "status": "open",
+      "component": "Lobby actor",
+      "files": [
+        "src/OsuRotate.Application/LobbyActor.cs"
+      ],
+      "summary": "A match-history read for one room can reach the next room",
+      "fix_commit": "",
+      "tests": "",
+      "notes": ""
+    },
+    {
+      "id": "OPEN-05",
+      "severity": "low",
+      "category": "edge-case",
+      "status": "open",
+      "component": "Lobby engine",
+      "files": [
+        "src/OsuRotate.Domain/LobbyEngine.cs"
+      ],
+      "summary": "Commands queued before an exception go out with the next event",
+      "fix_commit": "",
+      "tests": "",
+      "notes": ""
+    },
+    {
+      "id": "OPEN-06",
+      "severity": "info",
+      "category": "integration",
+      "status": "open",
+      "component": "Lobby lifecycle",
+      "files": [
+        "src/OsuRotate.Application/LobbyLifecycle.cs"
+      ],
+      "summary": "A room made just as the connection drops is orphaned",
+      "fix_commit": "",
+      "tests": "",
+      "notes": ""
+    },
+    {
+      "id": "OPEN-07",
+      "severity": "info",
+      "category": "usability",
+      "status": "open",
+      "component": "Chat panel",
+      "files": [
+        "src/OsuRotate.Web/Components/Lobby/ChatPanel.razor"
+      ],
+      "summary": "Chat times are in the server time zone",
+      "fix_commit": "",
+      "tests": "",
+      "notes": ""
+    },
+    {
+      "id": "OPEN-08",
+      "severity": "info",
+      "category": "usability",
+      "status": "open",
+      "component": "Lobby page",
+      "files": [
+        "src/OsuRotate.Application/LobbySnapshot.cs"
+      ],
+      "summary": "The current map is shown as a number, not a title",
+      "fix_commit": "",
+      "tests": "",
+      "notes": ""
+    }
+  ]
+}
