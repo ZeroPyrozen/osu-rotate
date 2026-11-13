@@ -8,29 +8,23 @@
 
 <PageTitle>osu-rotate</PageTitle>
 
-<nav class="site"><a href="" aria-current="page">Lobby</a> | <a href="history">History</a></nav>
+<h1 class="page-title">Lobby</h1>
 
-<h1>osu-rotate</h1>
-
-<LobbyView Snapshot="_snapshot" />
-
-<QueueControls Snapshot="_snapshot" />
-
-<ChatPanel Snapshot="_snapshot" />
-
-<ModerationPanel Snapshot="_snapshot" />
+@* The desk: what the room is doing on the left, its chat beside it. The sections are placed by
+   app.css (desk-main is a column whose order puts the queue right under the status). *@
+<div class="desk">
+    <div class="desk-main">
+        <LobbyView Snapshot="_snapshot" />
+        <QueueControls Snapshot="_snapshot" />
+        <LifecycleControls Snapshot="_snapshot" />
+        <ModerationPanel Snapshot="_snapshot" />
+    </div>
+    <aside class="desk-side" aria-label="Chat">
+        <ChatPanel Snapshot="_snapshot" />
+    </aside>
+</div>
 
 <RulesPanel Snapshot="_snapshot" />
-
-<LifecycleControls Snapshot="_snapshot" />
-
-<AuthorizeView>
-    <p>Signed in as <strong>@context.User.Identity?.Name</strong>.</p>
-    <form method="post" action="signout" data-enhance="false">
-        <AntiforgeryToken />
-        <button type="submit">Sign out</button>
-    </form>
-</AuthorizeView>
 
 @code {
     private LobbySnapshot? _snapshot;

@@ -186,7 +186,7 @@ public sealed partial class HardeningTests : IDisposable
         Assert.Contains("<link rel=\"icon\" href=\"data:,\"", html, StringComparison.Ordinal);
         if (path == "/history")
         {
-            Assert.Contains("<meter", html, StringComparison.Ordinal);
+            Assert.Contains("<svg class=\"chart\"", html, StringComparison.Ordinal);
         }
         Assert.All(ScriptTag().Matches(html), tag => Assert.Contains(" src=", tag.Value, StringComparison.Ordinal));
         Assert.DoesNotMatch(StyleAttribute(), html);

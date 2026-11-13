@@ -1,9 +1,30 @@
 ﻿@inherits LayoutComponentBase
 
-@Body
+<header class="topbar">
+    <div class="topbar-inner">
+        <a class="wordmark" href="">osu-rotate</a>
+        <nav class="site" aria-label="Pages">
+            <NavLink href="" Match="NavLinkMatch.All">Lobby</NavLink>
+            <NavLink href="history">History</NavLink>
+        </nav>
+        <AuthorizeView>
+            <div class="account">
+                <span class="who">Signed in as <strong>@context.User.Identity?.Name</strong></span>
+                <form method="post" action="signout" data-enhance="false">
+                    <AntiforgeryToken />
+                    <button type="submit" class="quiet">Sign out</button>
+                </form>
+            </div>
+        </AuthorizeView>
+    </div>
+</header>
+
+<main class="page">
+    @Body
+</main>
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
     <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
+    <span class="dismiss">×</span>
 </div>
