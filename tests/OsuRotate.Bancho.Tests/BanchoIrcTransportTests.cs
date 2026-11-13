@@ -36,7 +36,7 @@ public sealed class BanchoIrcTransportTests : IAsyncLifetime
         _stop.Dispose();
     }
 
-    private void StartTransport(string password = "secret", int messagesPerWindow = 8, TimeSpan? rateWindow = null, TimeSpan? idlePingAfter = null, TimeSpan? deadAfter = null)
+    private void StartTransport(string password = "secret", int messagesPerWindow = 8, TimeSpan? rateWindow = null, TimeSpan? idlePingAfter = null, TimeSpan? deadAfter = null, Microsoft.Extensions.Logging.ILogger<BanchoIrcTransport>? logger = null)
     {
         _transport = new BanchoIrcTransport(
             new BanchoOptions
@@ -52,7 +52,7 @@ public sealed class BanchoIrcTransportTests : IAsyncLifetime
                 ReconnectBaseDelay = TimeSpan.FromMilliseconds(20),
                 ReconnectMaxDelay = TimeSpan.FromMilliseconds(50),
             },
-            NullLogger<BanchoIrcTransport>.Instance);
+            logger ?? NullLogger<BanchoIrcTransport>.Instance);
 
         _collector = Task.Run(async () =>
         {
@@ -173,6 +173,35 @@ public sealed class BanchoIrcTransportTests : IAsyncLifetime
 
         await Next<TransportConnected>();
         Assert.Equal(2, _server.Connections);
+    }
+
+    // Anything unforeseen inside a session (here, a log sink that throws) used to end the transport
+    // for good: the bot stayed up but never spoke to Bancho again until the service was restarted.
+    [Fact]
+    public async Task An_unexpected_failure_in_a_session_reconnects()
+    {
+        StartTransport(logger: new FailsOnce());
+
+        await Next<TransportConnected>();
+        Assert.Equal(2, _server.Connections);
+    }
+
+    private sealed class FailsOnce : Microsoft.Extensions.Logging.ILogger<BanchoIrcTransport>
+    {
+        private int _failed;
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (formatter(state, exception) == "Connected to Bancho." && Interlocked.Exchange(ref _failed, 1) == 0)
+            {
+                throw new InvalidOperationException("The log sink broke.");
+            }
+        }
     }
 
     [Fact]
