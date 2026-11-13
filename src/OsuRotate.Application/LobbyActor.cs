@@ -204,7 +204,12 @@ public sealed class LobbyActor
             case CreateLobby or AttachLobby or CloseLobby or CloseLobbyWhenEmpty:
                 var step = _lifecycle.OnInput(input, _engine.Settings);
                 ResetIf(step);
-                return step.Commands;
+
+                // "Close when everyone has left" on a room that is already empty closes it now; it
+                // used to wait for the next event, which in an empty room may never come.
+                return input is CloseLobbyWhenEmpty
+                    ? [.. step.Commands, .. _lifecycle.AfterEngine(_engine.Room.Players.Count).Commands]
+                    : step.Commands;
             case SkipHost:
                 return _engine.Skip();
             case SkipToPlayer e:

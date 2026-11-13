@@ -337,6 +337,15 @@ public sealed class LobbyActorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Close_when_empty_closes_a_room_that_is_already_empty()
+    {
+        var actor = await StartInRoomAsync();
+        await actor.PostAsync(new CloseLobbyWhenEmpty(true));
+        await _transport.WaitForAsync(sent => sent.Any(c => c is CloseRoom));
+        Assert.Equal(LobbyStatus.Closing, actor.Snapshot.Status);
+    }
+
+    [Fact]
     public async Task Close_when_empty_closes_after_the_last_player_leaves()
     {
         var actor = await StartWithPlayersAsync();
