@@ -10,105 +10,98 @@
     <section class="lobby-rules" aria-label="Rules">
         <h2>Rules</h2>
         <form class="rules" @onsubmit="SaveAsync">
-            <fieldset>
+            <fieldset class="settings-section">
                 <legend>Map regulation</legend>
-                <label><input type="checkbox" @bind="_form.RegulationEnabled" /> Check maps</label>
-                <label>Lowest star rating <input type="number" step="0.01" min="0" @bind="_form.StarMin" /></label>
-                <label>Highest star rating <input type="number" step="0.01" min="0" @bind="_form.StarMax" /></label>
-                <label>Shortest length (seconds) <input type="number" min="0" @bind="_form.LengthMinSeconds" /></label>
-                <label>Longest length (seconds) <input type="number" min="0" @bind="_form.LengthMaxSeconds" /></label>
-                <label>
-                    Game mode
-                    <select @bind="_form.Mode">
-                        @foreach (var mode in Enum.GetValues<GameMode>())
-                        {
-                            <option value="@mode">@mode.OfficialName()</option>
-                        }
-                    </select>
-                </label>
-                <label><input type="checkbox" @bind="_form.AllowConvert" /> Allow converts</label>
-                <label>Rejected picks before losing the turn (0 never) <input type="number" min="0" @bind="_form.ViolationsAllowed" /></label>
-                <p class="hint">0 means no limit.</p>
+                <ToggleRow Label="Check maps" Hint="Reject picks outside these rules" @bind-Value="_form.RegulationEnabled" />
+                <TilePicker TValue="GameMode" Label="Game mode" Hint="Maps in other modes are rejected" Items="GameModes" Columns="4" Compact="true" @bind-Value="_form.Mode" />
+                <ToggleRow Label="Allow converts" Hint="osu! maps played in this mode" @bind-Value="_form.AllowConvert" />
+                <SliderRow Label="Lowest star rating" Min="0" Max="10" Step="0.01" Format="Stars" Zero="No limit" @bind-Value="_form.StarMin" />
+                <SliderRow Label="Highest star rating" Min="0" Max="10" Step="0.01" Format="Stars" Zero="No limit" @bind-Value="_form.StarMax" />
+                <NumberRow Label="Shortest length" Hint="0 for no limit" Unit="s" Min="0" @bind-Value="_form.LengthMinSeconds" />
+                <NumberRow Label="Longest length" Hint="0 for no limit" Unit="s" Min="0" @bind-Value="_form.LengthMaxSeconds" />
+                <NumberRow Label="Rejected picks before losing the turn" Hint="0 for no limit" Min="0" @bind-Value="_form.ViolationsAllowed" />
             </fieldset>
 
-            <fieldset>
+            <fieldset class="settings-section">
                 <legend>Room</legend>
-                <label><input type="checkbox" @bind="_form.KeepMode" /> Keep the team and score mode</label>
-                <label>
-                    Team mode
-                    <select @bind="_form.Team">
-                        @foreach (var team in Enum.GetValues<TeamMode>())
-                        {
-                            <option value="@team">@team</option>
-                        }
-                    </select>
+                <label class="form-row text-row">
+                    <span class="form-text">
+                        <span class="form-label">Room name</span>
+                        <span class="form-hint">Kept as the room's title; empty leaves it alone</span>
+                    </span>
+                    <input @bind="_form.Title" maxlength="@RoomKeeping.MaxTitleLength" autocomplete="off" />
                 </label>
-                <label>
-                    Score mode
-                    <select @bind="_form.Score">
-                        @foreach (var score in Enum.GetValues<ScoreMode>())
-                        {
-                            <option value="@score">@score</option>
-                        }
-                    </select>
-                </label>
-                <label>Size (0 not kept) <input type="number" min="0" max="@KeepCommand.MaxSize" @bind="_form.Size" /></label>
-                <label>
-                    Password
-                    <select @bind="_form.Password">
-                        <option value="@PasswordKeeping.NotKept">Not kept</option>
-                        <option value="@PasswordKeeping.Open">No password</option>
-                        <option value="@PasswordKeeping.Set">Keep a password</option>
-                    </select>
-                </label>
+                <ToggleRow Label="Keep the game type" Hint="Head to head or teams, and how scores count" @bind-Value="_form.KeepMode" />
+                @if (_form.KeepMode)
+                {
+                    <TilePicker TValue="TeamMode" Label="Game type" Items="TeamModes" @bind-Value="_form.Team" />
+                    <TilePicker TValue="ScoreMode" Label="Win condition" Items="ScoreModes" Columns="4" Compact="true" @bind-Value="_form.Score" />
+                }
+                <SliderRow Label="Player slots" Min="0" Max="@KeepCommand.MaxSize" Step="1" Format="Slots" Zero="Not kept" @bind-Value="Size" />
+                <TilePicker TValue="PasswordKeeping" Label="Password" Items="Passwords" Columns="3" Compact="true" @bind-Value="_form.Password" />
                 @if (_form.Password == PasswordKeeping.Set)
                 {
-                    <label>New password <input type="password" autocomplete="new-password" @bind="_form.NewPassword" placeholder="@(_hasPassword ? "unchanged" : null)" /></label>
+                    <label class="form-row text-row">
+                        <span class="form-text"><span class="form-label">New password</span></span>
+                        <input type="password" autocomplete="new-password" @bind="_form.NewPassword" placeholder="@(_hasPassword ? "unchanged" : null)" />
+                    </label>
                 }
-                <label><input type="checkbox" @bind="_form.KeepMods" /> Keep the mods</label>
-                <label>Mods <input @bind="_form.ModsText" placeholder="HD HR, Freemod or None" autocomplete="off" /></label>
-                <label>Title (empty not kept) <input @bind="_form.Title" maxlength="@RoomKeeping.MaxTitleLength" autocomplete="off" /></label>
+                <ToggleRow Label="Keep the mods" Hint="Put back if someone changes them" @bind-Value="_form.KeepMods" />
+                @if (_form.KeepMods)
+                {
+                    <ModPicker @bind-Value="_form.ModsText" />
+                }
             </fieldset>
 
-            <fieldset>
+            <fieldset class="settings-section">
                 <legend>Votes</legend>
-                <label>Skip: share <input type="number" step="0.01" min="0" max="1" @bind="_form.SkipShare" /> and at least <input type="number" min="1" @bind="_form.SkipMinimum" /></label>
-                <label>Start: share <input type="number" step="0.01" min="0" max="1" @bind="_form.StartShare" /> and at least <input type="number" min="1" @bind="_form.StartMinimum" /></label>
-                <label><input type="checkbox" @bind="_form.StartWhenAllReady" /> Start when everyone is ready</label>
-                <label>Abort: share <input type="number" step="0.01" min="0" max="1" @bind="_form.AbortShare" /> and at least <input type="number" min="1" @bind="_form.AbortMinimum" /></label>
+                <SliderRow Label="Skip the host" Hint="Share of players needed" Min="0" Max="1" Step="0.05" Format="Percent" @bind-Value="_form.SkipShare" />
+                <NumberRow Label="Skip votes at least" Min="1" @bind-Value="_form.SkipMinimum" />
+                <SliderRow Label="Start the match" Hint="Share of players needed" Min="0" Max="1" Step="0.05" Format="Percent" @bind-Value="_form.StartShare" />
+                <NumberRow Label="Start votes at least" Min="1" @bind-Value="_form.StartMinimum" />
+                <ToggleRow Label="Start when everyone is ready" @bind-Value="_form.StartWhenAllReady" />
+                <SliderRow Label="Abort the match" Hint="Share of players needed" Min="0" Max="1" Step="0.05" Format="Percent" @bind-Value="_form.AbortShare" />
+                <NumberRow Label="Abort votes at least" Min="1" @bind-Value="_form.AbortMinimum" />
             </fieldset>
 
-            <fieldset>
+            <fieldset class="settings-section">
                 <legend>AFK</legend>
-                <label><input type="checkbox" @bind="_form.SkipAfkHost" /> Skip an AFK host</label>
-                <label>First host check (seconds) <input type="number" min="0" @bind="_form.HostAfkFirstCheckSeconds" /></label>
-                <label>Host check every (seconds, 0 off) <input type="number" min="0" @bind="_form.HostAfkCheckIntervalSeconds" /></label>
-                <label><input type="checkbox" @bind="_form.AfkKickEnabled" /> Kick AFK players</label>
-                <label>Kick after this many points <input type="number" min="1" @bind="_form.AfkKickThreshold" /></label>
-                <label>Kick cooldown (seconds) <input type="number" min="10" @bind="_form.AfkKickCooldownSeconds" /></label>
+                <ToggleRow Label="Skip an AFK host" @bind-Value="_form.SkipAfkHost" />
+                <NumberRow Label="First host check" Unit="s" Min="0" @bind-Value="_form.HostAfkFirstCheckSeconds" />
+                <NumberRow Label="Check the host every" Hint="0 turns it off" Unit="s" Min="0" @bind-Value="_form.HostAfkCheckIntervalSeconds" />
+                <ToggleRow Label="Kick AFK players" @bind-Value="_form.AfkKickEnabled" />
+                <NumberRow Label="Kick after this many points" Min="1" @bind-Value="_form.AfkKickThreshold" />
+                <NumberRow Label="Kick cooldown" Unit="s" Min="10" @bind-Value="_form.AfkKickCooldownSeconds" />
             </fieldset>
 
-            <fieldset>
+            <fieldset class="settings-section">
                 <legend>Matches</legend>
-                <label><input type="checkbox" @bind="_form.AutoStartEnabled" /> Auto start</label>
-                <label><input type="checkbox" @bind="_form.AutoStartClearsHost" /> Auto start clears the host</label>
-                <label>Auto start after (seconds) <input type="number" min="15" @bind="_form.AutoStartDelaySeconds" /></label>
-                <label><input type="checkbox" @bind="_form.AbortStuckMatch" /> Abort a stuck match</label>
-                <label>Stuck once this share finished <input type="number" step="0.01" min="0" max="1" @bind="_form.StuckMatchFinishedShare" /></label>
-                <label>and still running after (seconds, 0 off) <input type="number" min="0" @bind="_form.StuckMatchDelaySeconds" /></label>
-                <label>Kick a host who kicks this many players (0 off) <input type="number" min="0" @bind="_form.HostKickTolerance" /></label>
-                <label>Check for host kicks every (seconds) <input type="number" min="10" @bind="_form.HostKickCheckIntervalSeconds" /></label>
+                <ToggleRow Label="Auto start" Hint="Start a while after an accepted pick" @bind-Value="_form.AutoStartEnabled" />
+                <ToggleRow Label="Auto start clears the host" @bind-Value="_form.AutoStartClearsHost" />
+                <NumberRow Label="Auto start after" Unit="s" Min="15" @bind-Value="_form.AutoStartDelaySeconds" />
+                <ToggleRow Label="Abort a stuck match" @bind-Value="_form.AbortStuckMatch" />
+                <SliderRow Label="Stuck once this share finished" Min="0" Max="1" Step="0.05" Format="Percent" @bind-Value="_form.StuckMatchFinishedShare" />
+                <NumberRow Label="and still running after" Hint="0 turns it off" Unit="s" Min="0" @bind-Value="_form.StuckMatchDelaySeconds" />
+                <NumberRow Label="Kick a host who kicks this many players" Hint="0 turns it off" Min="0" @bind-Value="_form.HostKickTolerance" />
+                <NumberRow Label="Check for host kicks every" Unit="s" Min="10" @bind-Value="_form.HostKickCheckIntervalSeconds" />
             </fieldset>
 
-            <fieldset>
+            <fieldset class="settings-section">
                 <legend>Info message</legend>
-                <label>Said for !info and !help <textarea rows="4" @bind="_form.InfoMessage"></textarea></label>
-                <p class="hint">${version} becomes the running version. Each line is said separately.</p>
-                <label>Say it every (seconds, 0 off) <input type="number" min="0" @bind="_form.InfoAnnouncementIntervalSeconds" /></label>
+                <label class="form-row text-row stacked">
+                    <span class="form-text">
+                        <span class="form-label">Said for !info and !help</span>
+                        <span class="form-hint">${version} becomes the running version; each line is said separately</span>
+                    </span>
+                    <textarea rows="4" @bind="_form.InfoMessage"></textarea>
+                </label>
+                <NumberRow Label="Say it every" Hint="0 turns it off" Unit="s" Min="0" @bind-Value="_form.InfoAnnouncementIntervalSeconds" />
             </fieldset>
 
-            <button type="submit" disabled="@_busy">Save rules</button>
-            <button type="button" class="reset" disabled="@_busy" @onclick="Reset">Reset</button>
+            <div class="form-actions">
+                <button type="submit" disabled="@_busy">Save rules</button>
+                <button type="button" class="reset" disabled="@_busy" @onclick="Reset">Reset</button>
+            </div>
         </form>
 
         @if (_message is not null)
@@ -119,6 +112,51 @@
 }
 
 @code {
+    private static readonly IReadOnlyList<TileChoice<GameMode>> GameModes =
+        [.. Enum.GetValues<GameMode>().Select(m => new TileChoice<GameMode>(m, m.OfficialName()))];
+
+    private static readonly IReadOnlyList<TileChoice<TeamMode>> TeamModes =
+    [
+        new(TeamMode.HeadToHead, "Head to head", "Everyone for themselves"),
+        new(TeamMode.TagCoop, "Tag co-op", "Take turns, together"),
+        new(TeamMode.TeamVs, "Team VS", "Red against blue"),
+        new(TeamMode.TagTeamVs, "Tag team VS", "Teams taking turns"),
+    ];
+
+    private static readonly IReadOnlyList<TileChoice<ScoreMode>> ScoreModes =
+    [
+        new(ScoreMode.Score, "Score"),
+        new(ScoreMode.Accuracy, "Accuracy"),
+        new(ScoreMode.Combo, "Combo"),
+        new(ScoreMode.ScoreV2, "Score V2"),
+    ];
+
+    private static readonly IReadOnlyList<TileChoice<PasswordKeeping>> Passwords =
+    [
+        new(PasswordKeeping.NotKept, "Not kept"),
+        new(PasswordKeeping.Open, "No password"),
+        new(PasswordKeeping.Set, "Password"),
+    ];
+
+    private static string Stars(double value) => value.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + "★";
+
+    private static string Percent(double value) => value.ToString("0%", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string Slots(double value) => value.ToString("0", System.Globalization.CultureInfo.InvariantCulture);
+
+    // The slots slider works in doubles; the form keeps a whole number.
+    private double Size
+    {
+        get => _form?.Size ?? 0;
+        set
+        {
+            if (_form is not null)
+            {
+                _form.Size = (int)Math.Round(value);
+            }
+        }
+    }
+
     private RuleForm? _form;
     private RuleActions? _actions;
     private string? _message;

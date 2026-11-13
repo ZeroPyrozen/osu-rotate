@@ -1,0 +1,55 @@
+@using System.Globalization
+@* A slider with its value shown beside it, for values with a natural range (star rating, shares). *@
+
+<label class="form-row slider-row">
+    <span class="form-text">
+        <span class="form-label">@Label</span>
+        @if (Hint is not null)
+        {
+            <span class="form-hint">@Hint</span>
+        }
+    </span>
+    <span class="slider">
+        <input type="range" min="@Number(Min)" max="@Number(Max)" step="@Number(Step)" value="@Number(Value)" @oninput="OnInput" />
+        <output class="slider-value">@Display(Value)</output>
+    </span>
+</label>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Hint { get; set; }
+
+    [Parameter]
+    public double Min { get; set; }
+
+    [Parameter]
+    public double Max { get; set; } = 1;
+
+    [Parameter]
+    public double Step { get; set; } = 0.01;
+
+    [Parameter]
+    public double Value { get; set; }
+
+    [Parameter]
+    public EventCallback<double> ValueChanged { get; set; }
+
+    // How the value reads, for example "5.5*" or "50%"; Zero is shown for 0 when given.
+    [Parameter]
+    public Func<double, string> Format { get; set; } = v => v.ToString("0.##", CultureInfo.InvariantCulture);
+
+    [Parameter]
+    public string? Zero { get; set; }
+
+    private string Display(double value) => value == 0 && Zero is not null ? Zero : Format(value);
+
+    private static string Number(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
+
+    private Task OnInput(ChangeEventArgs args) =>
+        double.TryParse(args.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+            ? ValueChanged.InvokeAsync(value)
+            : Task.CompletedTask;
+}

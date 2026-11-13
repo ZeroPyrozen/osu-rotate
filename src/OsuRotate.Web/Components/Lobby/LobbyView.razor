@@ -102,7 +102,7 @@
                                 }
                             </td>
                             <td>@(player.Team == Team.None ? "-" : player.Team.ToString())</td>
-                            <td>@StateText(player.Status)</td>
+                            <td><span class="state @player.Status.ToString().ToLowerInvariant()">@StateText(player.Status)</span></td>
                         </tr>
                     }
                 </tbody>

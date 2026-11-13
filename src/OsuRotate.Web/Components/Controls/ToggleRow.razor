@@ -1,0 +1,29 @@
+@* A lazer-style form row: label (and a hint) on the left, a switch on the right. Still a real
+   checkbox underneath, so it works with the keyboard and screen readers. *@
+
+<label class="form-row toggle-row">
+    <span class="form-text">
+        <span class="form-label">@Label</span>
+        @if (Hint is not null)
+        {
+            <span class="form-hint">@Hint</span>
+        }
+    </span>
+    <input type="checkbox" role="switch" class="switch" checked="@Value" @onchange="OnChange" />
+</label>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Hint { get; set; }
+
+    [Parameter]
+    public bool Value { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> ValueChanged { get; set; }
+
+    private Task OnChange(ChangeEventArgs args) => ValueChanged.InvokeAsync(args.Value is true);
+}

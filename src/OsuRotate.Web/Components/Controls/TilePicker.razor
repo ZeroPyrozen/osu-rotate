@@ -1,0 +1,54 @@
+@typeparam TValue
+@* Pick one of a few choices, as lazer's game type picker does: each choice is a tile, the chosen
+   one is lit. A radio group for assistive technology. *@
+
+<div class="form-row tile-row">
+    <span class="form-text">
+        <span class="form-label">@Label</span>
+        @if (Hint is not null)
+        {
+            <span class="form-hint">@Hint</span>
+        }
+    </span>
+    <div class="tiles @(Compact ? "compact" : null) cols-@Columns" role="radiogroup" aria-label="@Label">
+        @foreach (var item in Items)
+        {
+            var chosen = EqualityComparer<TValue>.Default.Equals(item.Value, Value);
+            <button type="button" role="radio" aria-checked="@(chosen ? "true" : "false")" class="tile @(chosen ? "chosen" : null)"
+                    disabled="@Disabled" @onclick="() => ValueChanged.InvokeAsync(item.Value)">
+                <span class="tile-name">@item.Name</span>
+                @if (item.Note is not null)
+                {
+                    <span class="tile-note">@item.Note</span>
+                }
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Hint { get; set; }
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<TileChoice<TValue>> Items { get; set; } = [];
+
+    [Parameter]
+    public TValue Value { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback<TValue> ValueChanged { get; set; }
+
+    [Parameter]
+    public bool Compact { get; set; }
+
+    // Tiles per row, so a set never wraps to a lone tile; phones fall back to two (app.css).
+    [Parameter]
+    public int Columns { get; set; } = 2;
+
+    [Parameter]
+    public bool Disabled { get; set; }
+}
