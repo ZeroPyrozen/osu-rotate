@@ -74,6 +74,7 @@ public sealed class LobbyLifecycle
                 _connected = false;
                 _createWhenConnected = false;
                 Status = LobbyStatus.Idle;
+                Notice = "Bancho refused the IRC login, so the bot is not connected. Check Bancho__Nick and Bancho__Password, then restart the service.";
                 return LifecycleStep.None;
 
             // Creating a room also joins its channel. Only RoomCreated reaches the engine, once.
@@ -97,6 +98,13 @@ public sealed class LobbyLifecycle
                 return LifecycleStep.Pass;
 
             case RoomCreated:
+                return LifecycleStep.None;
+            case RoomCreateRefused e when Status == LobbyStatus.Creating && RoomId is null:
+                // Without this the lobby would wait in Creating for a room that never comes.
+                var refused = Forget();
+                Notice = $"Bancho would not make a room: {e.Reason}";
+                return refused;
+            case RoomCreateRefused:
                 return LifecycleStep.None;
 
             case RoomJoinFailed e when Status == LobbyStatus.Rejoining && e.RoomId == RoomId:

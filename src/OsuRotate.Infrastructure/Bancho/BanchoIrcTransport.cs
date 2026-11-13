@@ -130,6 +130,13 @@ public sealed class BanchoIrcTransport : ILobbyTransport, IDisposable
                 {
                     reason = exception.Message;
                 }
+#pragma warning disable CA1031 // Whatever broke one session, a bot that runs unattended must come back.
+                catch (Exception exception)
+#pragma warning restore CA1031
+                {
+                    LogUnexpectedFailure(exception);
+                    reason = exception.Message;
+                }
 
                 ResetSession(reason);
 
@@ -147,6 +154,20 @@ public sealed class BanchoIrcTransport : ILobbyTransport, IDisposable
         {
             ResetSession("Transport stopped.");
             _events.Writer.TryComplete();
+        }
+    }
+
+    // Logging is what failed in at least one way this can happen, so it must not throw from here.
+    private void LogUnexpectedFailure(Exception exception)
+    {
+        try
+        {
+            _logger.LogError(exception, "The Bancho session failed in an unexpected way. Reconnecting.");
+        }
+#pragma warning disable CA1031
+        catch (Exception)
+#pragma warning restore CA1031
+        {
         }
     }
 
@@ -364,6 +385,12 @@ public sealed class BanchoIrcTransport : ILobbyTransport, IDisposable
             if (parsed is RoomCreated created)
             {
                 HandleRoomCreated(created);
+            }
+            else if (parsed is RoomCreateRefused)
+            {
+                // No room is coming, so the next channel joined is not the one that was asked for.
+                _awaitingCreatedRoom = false;
+                Emit(parsed);
             }
             else if (parsed is not null)
             {

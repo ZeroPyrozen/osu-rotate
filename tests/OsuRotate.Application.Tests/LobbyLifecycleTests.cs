@@ -42,6 +42,33 @@ public class LobbyLifecycleTests
         }
 
         [Fact]
+        public void A_create_that_bancho_refuses_goes_back_to_idle_and_says_why()
+        {
+            var lifecycle = Connected();
+            Do(lifecycle, new CreateLobby("my room"));
+
+            var step = On(lifecycle, new RoomCreateRefused("You cannot create any more tournament matches."));
+
+            Assert.Empty(step.Commands);
+            Assert.Equal(LobbyStatus.Idle, lifecycle.Status);
+            Assert.Null(lifecycle.RoomId);
+            Assert.Equal("Bancho would not make a room: You cannot create any more tournament matches.", lifecycle.Notice);
+
+            // The owner can try again once a room has been closed.
+            Assert.Equal([new CreateRoom("my room")], Do(lifecycle, new CreateLobby("my room")).Commands);
+        }
+
+        [Fact]
+        public void A_refusal_with_no_create_pending_changes_nothing()
+        {
+            var lifecycle = OpenRoom();
+            On(lifecycle, new RoomCreateRefused("You cannot create any more tournament matches."));
+            Assert.Equal(LobbyStatus.Open, lifecycle.Status);
+            Assert.Equal(7, lifecycle.RoomId);
+            Assert.Null(lifecycle.Notice);
+        }
+
+        [Fact]
         public void Tracks_whether_bancho_is_connected()
         {
             var lifecycle = new LobbyLifecycle();
@@ -339,6 +366,16 @@ public class LobbyLifecycleTests
             On(lifecycle, new TransportAuthenticationFailed());
             Assert.Equal(LobbyStatus.Idle, lifecycle.Status);
             Assert.Equal(7, lifecycle.RoomId);
+        }
+
+        [Fact]
+        public void A_wrong_password_is_explained_on_the_dashboard()
+        {
+            var lifecycle = new LobbyLifecycle();
+            On(lifecycle, new TransportAuthenticationFailed());
+            Assert.Equal(
+                "Bancho refused the IRC login, so the bot is not connected. Check Bancho__Nick and Bancho__Password, then restart the service.",
+                lifecycle.Notice);
         }
 
         [Fact]

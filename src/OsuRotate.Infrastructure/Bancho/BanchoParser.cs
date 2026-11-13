@@ -39,6 +39,9 @@ internal static class BanchoParser
     private static readonly (Regex Pattern, Func<Match, LobbyEvent> Create)[] Patterns =
     [
         (new(@"^Created the tournament match https://osu\.ppy\.sh/mp/(\d+) (.+)$", Options), m => new RoomCreated(Long(m, 1), m.Groups[2].Value)),
+        // An account may have four tournament rooms open. Matched on how the sentence starts, since the
+        // rest of it has not been seen live.
+        (new(@"^You cannot create any more tournament matches", Options), m => new RoomCreateRefused(m.Result("$_"))),
         (new(@"^Added (.+) to the match referees$", Options), m => new RefereeAdded(m.Groups[1].Value)),
         (new(@"^Removed (.+) from the match referees$", Options), m => new RefereeRemoved(m.Groups[1].Value)),
         (new(@"^Beatmap changed to: (.+) \(https://osu\.ppy\.sh/b/(\d+)\)$", Options), m => new BeatmapChanged(Int(m, 2), m.Groups[1].Value, ChangedByReferee: false)),

@@ -15,7 +15,11 @@ public sealed class OsuBeatmapCatalog(OsuApiClient api, TimeProvider? time = nul
     private readonly ConcurrentDictionary<(int Id, GameMode Mode), Cached> _cache = new();
     private readonly ConcurrentDictionary<int, DateTimeOffset> _unavailable = new();
 
+    private long _prunedAt;
+
     public int CachedMaps => _cache.Count;
+
+    public int UnavailableMaps => _unavailable.Count;
 
     public async ValueTask<BeatmapLookup> FindAsync(int beatmapId, GameMode mode, bool allowConvert, CancellationToken cancellationToken)
     {
@@ -25,6 +29,7 @@ public sealed class OsuBeatmapCatalog(OsuApiClient api, TimeProvider? time = nul
             return cached;
         }
 
+        Prune(now);
         var result = await api.GetAsync($"/api/v2/beatmapsets/lookup?beatmap_id={beatmapId}", cancellationToken).ConfigureAwait(false);
         using var body = result.Body;
         switch (result.Outcome)
@@ -60,6 +65,36 @@ public sealed class OsuBeatmapCatalog(OsuApiClient api, TimeProvider? time = nul
 
         return Pick(beatmapId, mode, allowConvert, now) ?? new BeatmapLookup(BeatmapLookupOutcome.ModeMismatch, null);
     }
+
+    // A lobby that runs for months looks up thousands of sets and plays few of them twice. An entry
+    // was only dropped when the same map was asked for again, so the rest stayed for good. Now and
+    // then, everything past its day is dropped.
+    private void Prune(DateTimeOffset now)
+    {
+        var last = Interlocked.Read(ref _prunedAt);
+        if (now.UtcTicks - last < PruneEvery.Ticks || Interlocked.CompareExchange(ref _prunedAt, now.UtcTicks, last) != last)
+        {
+            return;
+        }
+
+        foreach (var entry in _cache)
+        {
+            if (now - entry.Value.FetchedAt >= CacheFor)
+            {
+                _cache.TryRemove(entry);
+            }
+        }
+
+        foreach (var entry in _unavailable)
+        {
+            if (now - entry.Value >= CacheFor)
+            {
+                _unavailable.TryRemove(entry);
+            }
+        }
+    }
+
+    private static readonly TimeSpan PruneEvery = TimeSpan.FromHours(1);
 
     private BeatmapLookup? Pick(int beatmapId, GameMode mode, bool allowConvert, DateTimeOffset now)
     {

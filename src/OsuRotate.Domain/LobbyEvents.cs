@@ -48,6 +48,9 @@ public sealed record TransportAuthenticationFailed : LobbyEvent;
 public sealed record RoomCreated(long RoomId, string Title) : LobbyEvent;
 public sealed record RoomJoined(long RoomId) : LobbyEvent;
 public sealed record RoomJoinFailed(long RoomId, string Reason) : LobbyEvent;
+
+// BanchoBot's answer to !mp make when it will not make a room, in its own words.
+public sealed record RoomCreateRefused(string Reason) : LobbyEvent;
 public sealed record RoomClosed(long RoomId) : LobbyEvent;
 public sealed record RoomCloseAcknowledged : LobbyEvent;
 public sealed record RoomStateReceived(RoomState State) : LobbyEvent;

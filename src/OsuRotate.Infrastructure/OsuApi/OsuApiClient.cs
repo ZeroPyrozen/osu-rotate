@@ -132,13 +132,18 @@ public sealed class OsuApiClient : IDisposable
         }
     }
 
-    private TimeSpan? RetryAfter(HttpResponseMessage response) =>
-        response.Headers.RetryAfter switch
+    // Never negative: a Retry-After date that has already passed means "now", and Task.Delay throws
+    // on a negative wait.
+    private TimeSpan? RetryAfter(HttpResponseMessage response)
+    {
+        TimeSpan? wait = response.Headers.RetryAfter switch
         {
             { Delta: { } delta } => delta,
             { Date: { } date } => date - _time.GetUtcNow(),
             _ => null,
         };
+        return wait < TimeSpan.Zero ? TimeSpan.Zero : wait;
+    }
 
     private async Task<string?> TokenAsync(CancellationToken cancellationToken)
     {

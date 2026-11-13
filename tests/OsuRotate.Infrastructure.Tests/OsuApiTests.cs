@@ -127,6 +127,26 @@ public abstract class OsuApiTests : IDisposable
         }
 
         [Fact]
+        public async Task Maps_nobody_asks_for_again_leave_the_cache_after_a_day()
+        {
+            Serve(2001, Fixtures.Set);
+            Serve(3001, Fixtures.Unavailable(downloadDisabled: true, moreInformation: null));
+            var catalog = Catalog(_fakeTime);
+            await catalog.FindAsync(2001, GameMode.Osu, true, default);
+            await catalog.FindAsync(3001, GameMode.Osu, true, default);
+            Assert.Equal(5, catalog.CachedMaps);
+            Assert.True(catalog.UnavailableMaps > 0);
+
+            // A day later another set is looked up; the lobby never plays the first two again.
+            _fakeTime.Advance(OsuBeatmapCatalog.CacheFor + TimeSpan.FromHours(1));
+            Serve(4001, Fixtures.Set.Replace("2001", "4001", StringComparison.Ordinal).Replace("2002", "4002", StringComparison.Ordinal));
+            await catalog.FindAsync(4001, GameMode.Osu, true, default);
+
+            Assert.Equal(5, catalog.CachedMaps);
+            Assert.Equal(0, catalog.UnavailableMaps);
+        }
+
+        [Fact]
         public async Task One_request_caches_the_whole_set_for_a_day()
         {
             Serve(2001, Fixtures.Set);
@@ -203,6 +223,15 @@ public abstract class OsuApiTests : IDisposable
 
             Assert.Equal(BeatmapLookupOutcome.Failed, (await Catalog().FindAsync(2001, GameMode.Osu, true, default)).Outcome);
             Assert.Equal(3, _api.ApiRequests);
+        }
+
+        [Fact]
+        public async Task A_retry_after_date_that_has_passed_is_retried_at_once()
+        {
+            Serve(2001, Fixtures.Set);
+            _api.Script.Enqueue((HttpStatusCode.TooManyRequests, "", -1));
+            Assert.Equal(BeatmapLookupOutcome.Found, (await Catalog().FindAsync(2001, GameMode.Osu, true, default)).Outcome);
+            Assert.Equal(2, _api.ApiRequests);
         }
 
         [Fact]
