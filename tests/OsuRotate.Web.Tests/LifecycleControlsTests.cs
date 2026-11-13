@@ -261,6 +261,14 @@ public class LifecycleControlsTests
         }
 
         [Fact]
+        public async Task A_notice_about_the_room_is_shown_as_text()
+        {
+            var html = await RenderAsync(Snapshot(LobbyStatus.Idle) with { Notice = "Could not attach to room 42 (Bancho: <No such channel>)." });
+            Assert.Contains("<p class=\"notice\" role=\"status\">Could not attach to room 42 (Bancho: &lt;No such channel&gt;).</p>", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("class=\"notice\"", await RenderAsync(Snapshot(LobbyStatus.Idle)), StringComparison.Ordinal);
+        }
+
+        [Fact]
         public async Task Closing_offers_nothing()
         {
             var html = await RenderAsync(Snapshot(LobbyStatus.Closing, 7));

@@ -126,6 +126,11 @@ public sealed partial class LobbyEngine
         {
             case RoomCreated or RoomJoined:
                 KeeperOnRoomEntered();
+                if (lobbyEvent is RoomCreated)
+                {
+                    KeeperOnRoomCreated();
+                }
+
                 StartInfoAnnouncement();
                 HostKicksOnRoomEntered();
                 if (lobbyEvent is RoomJoined)

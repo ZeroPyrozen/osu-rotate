@@ -199,6 +199,42 @@ public class LobbyLifecycleTests
             Assert.Null(lifecycle.RoomId);
         }
 
+        // Bancho only lets the bot into a room it referees (design UC2); the owner is told why.
+        [Fact]
+        public void A_refused_attach_says_why()
+        {
+            var lifecycle = Connected();
+            Do(lifecycle, new AttachLobby(42));
+            Assert.Null(lifecycle.Notice);
+
+            On(lifecycle, new RoomJoinFailed(42, "No such channel"));
+            Assert.Equal(
+                "Could not attach to room 42 (Bancho: No such channel). The room must be open, and the bot's account must be its creator or a referee.",
+                lifecycle.Notice);
+        }
+
+        [Fact]
+        public void The_next_room_action_clears_the_notice()
+        {
+            var lifecycle = Connected();
+            Do(lifecycle, new AttachLobby(42));
+            On(lifecycle, new RoomJoinFailed(42, "No such channel"));
+
+            Do(lifecycle, new AttachLobby(43));
+            Assert.Null(lifecycle.Notice);
+        }
+
+        [Fact]
+        public void A_successful_attach_has_no_notice()
+        {
+            var lifecycle = Connected();
+            Do(lifecycle, new AttachLobby(7));
+            On(lifecycle, new RoomJoined(7));
+            On(lifecycle, new RoomStateReceived(EmptyRoom));
+            Assert.Equal(LobbyStatus.Open, lifecycle.Status);
+            Assert.Null(lifecycle.Notice);
+        }
+
         [Fact]
         public void A_join_of_another_room_while_rejoining_is_ignored()
         {
@@ -293,6 +329,7 @@ public class LobbyLifecycleTests
             Assert.Equal(LobbyStatus.Connecting, lifecycle.Status);
             Assert.Equal([new JoinRoom(7)], On(lifecycle, new TransportConnected()).Commands);
             Assert.Equal([new CreateRoom("saved")], On(lifecycle, new RoomJoinFailed(7, "gone")).Commands);
+            Assert.Equal("Room 7 could not be rejoined (Bancho: gone), so a new room was made.", lifecycle.Notice);
         }
 
         [Fact]
@@ -401,6 +438,17 @@ public class LobbyLifecycleTests
             var lifecycle = OpenRoom();
             On(lifecycle, new ChatReceived("p1", "!mp close", false));
             Assert.Equal([new CreateRoom("my room")], On(lifecycle, new RoomClosed(7)).Commands);
+            Assert.Equal("Room 7 was closed outside the dashboard, so a new room was made.", lifecycle.Notice);
+        }
+
+        [Fact]
+        public void Closing_from_the_dashboard_leaves_no_notice()
+        {
+            var lifecycle = OpenRoom();
+            Do(lifecycle, new CloseLobby());
+            On(lifecycle, new RoomClosed(7));
+            Assert.Null(lifecycle.Notice);
+            Assert.Equal(LobbyStatus.Idle, lifecycle.Status);
         }
 
         [Fact]

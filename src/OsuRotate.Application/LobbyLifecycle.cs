@@ -1,3 +1,4 @@
+using System.Globalization;
 using OsuRotate.Domain;
 
 namespace OsuRotate.Application;
@@ -16,6 +17,7 @@ public sealed class LobbyLifecycle
     private bool _recreateIfGone;
     private bool _closeWhenEmpty;
     private bool _closedOnPurpose;
+    private bool _attachedByOwner;
 
     // A saved session from before a restart: rejoin it, and recreate it if it is gone.
     public LobbyLifecycle(long? savedRoomId = null, string? savedTitle = null)
@@ -31,17 +33,29 @@ public sealed class LobbyLifecycle
     public string? Title { get; private set; }
     public bool ClosingWhenEmpty => _closeWhenEmpty;
 
+    // What the owner should know about the room that the status alone doesn't say: a room that
+    // couldn't be attached and why, or one that was replaced. Cleared by the owner's next room action.
+    public string? Notice { get; private set; }
+
     // Whether Bancho's IRC connection is up, which Idle alone does not say.
     public bool Connected => _connected;
 
-    public LifecycleStep OnInput(LobbyInput input, LobbySettings settings) => input switch
+    public LifecycleStep OnInput(LobbyInput input, LobbySettings settings)
     {
-        CreateLobby e => Create(e.Title),
-        AttachLobby e => Attach(e.RoomId),
-        CloseLobby => Close(),
-        CloseLobbyWhenEmpty e => CloseWhenEmpty(e.Enabled, settings),
-        _ => LifecycleStep.None,
-    };
+        if (input is CreateLobby or AttachLobby or CloseLobby)
+        {
+            Notice = null;
+        }
+
+        return input switch
+        {
+            CreateLobby e => Create(e.Title),
+            AttachLobby e => Attach(e.RoomId),
+            CloseLobby => Close(),
+            CloseLobbyWhenEmpty e => CloseWhenEmpty(e.Enabled, settings),
+            _ => LifecycleStep.None,
+        };
+    }
 
     public LifecycleStep OnEvent(LobbyEvent lobbyEvent, LobbySettings settings)
     {
@@ -86,6 +100,14 @@ public sealed class LobbyLifecycle
                 return LifecycleStep.None;
 
             case RoomJoinFailed e when Status == LobbyStatus.Rejoining && e.RoomId == RoomId:
+                // Bancho lets the bot into a room's channel only if its account is a referee of
+                // the room and the room is open (design UC2), so this is where a room that isn't
+                // ours is refused.
+                Notice = _recreateIfGone
+                    ? string.Create(CultureInfo.InvariantCulture, $"Room {e.RoomId} could not be rejoined (Bancho: {e.Reason}), so a new room was made.")
+                    : _attachedByOwner
+                        ? string.Create(CultureInfo.InvariantCulture, $"Could not attach to room {e.RoomId} (Bancho: {e.Reason}). The room must be open, and the bot's account must be its creator or a referee.")
+                        : string.Create(CultureInfo.InvariantCulture, $"Room {e.RoomId} from before the restart could not be rejoined (Bancho: {e.Reason}). Create or attach a room.");
                 return OnRoomGone();
 
             case RoomJoinFailed:
@@ -154,6 +176,7 @@ public sealed class LobbyLifecycle
 
     private LifecycleStep SendCreate()
     {
+        _attachedByOwner = false;
         _createWhenConnected = false;
         _swallowJoin = true;
         _closeWhenEmpty = false;
@@ -171,6 +194,7 @@ public sealed class LobbyLifecycle
         }
 
         RoomId = roomId;
+        _attachedByOwner = true;
         _createWhenConnected = false;
 
         // The owner picked this room: if it is gone, say so rather than make another.
@@ -292,6 +316,9 @@ public sealed class LobbyLifecycle
         }
 
         // Closed by Bancho or someone else: the lobby is meant to stay open.
+        Notice = RoomId is { } closed
+            ? string.Create(CultureInfo.InvariantCulture, $"Room {closed} was closed outside the dashboard, so a new room was made.")
+            : null;
         return SendCreate();
     }
 
@@ -303,6 +330,7 @@ public sealed class LobbyLifecycle
         _closedOnPurpose = false;
         _createWhenConnected = false;
         _recreateIfGone = false;
+        _attachedByOwner = false;
         Status = LobbyStatus.Idle;
         return new LifecycleStep([], ResetEngine: true);
     }
