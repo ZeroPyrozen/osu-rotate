@@ -37,6 +37,7 @@ public sealed class SqliteLobbyStoreTests : IDisposable
         SkipVote = new VoteRule(0.6, 3),
         HostTransferTimeout = TimeSpan.FromSeconds(7),
         Regulation = new MapRegulation { StarMin = 4, StarMax = 6.5, Mode = GameMode.Taiko, AllowConvert = false },
+        MapPick = new MapPickSettings { Enabled = true, OldestRankedYear = 2015 },
         Keeping = new RoomKeeping
         {
             Mode = new KeptMode(TeamMode.TeamVs, ScoreMode.ScoreV2),
@@ -177,6 +178,19 @@ public sealed class SqliteLobbyStoreTests : IDisposable
         var loaded = await store.LoadAsync(default);
         Assert.Null(loaded.Settings);
         Assert.Equal(7, loaded.Session!.RoomId);
+    }
+
+    [Fact]
+    public async Task Settings_saved_before_map_picks_load_with_map_picks_off()
+    {
+        var store = Open();
+        await store.SaveAsync(Lobby(), default);
+        await ExecuteAsync("UPDATE LobbyConfig SET SettingsJson = '{\"OwnerName\": \"creator\", \"AfkKickThreshold\": 9}'");
+
+        var settings = (await store.LoadAsync(default)).Settings!;
+        Assert.Equal(9, settings.AfkKickThreshold);
+        Assert.Equal(new MapPickSettings(), settings.MapPick);
+        Assert.False(settings.MapPick.Enabled);
     }
 
     [Fact]

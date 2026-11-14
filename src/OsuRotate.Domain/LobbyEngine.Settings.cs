@@ -88,6 +88,11 @@ public static class SettingsRules
     {
         var problems = new List<string>();
         Regulation(settings.Regulation, problems);
+        if (settings.MapPick.OldestRankedYear is < MapPickSettings.FirstRankedYear or > MapPickSettings.LastAllowedYear)
+        {
+            problems.Add(string.Create(CultureInfo.InvariantCulture, $"The oldest ranked year must be from {MapPickSettings.FirstRankedYear} to {MapPickSettings.LastAllowedYear}."));
+        }
+
         Keeping(settings.Keeping, problems);
         Vote("skip", settings.SkipVote, problems);
         Vote("start", settings.StartVote, problems);

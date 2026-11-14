@@ -47,6 +47,8 @@ public sealed record LobbySettings
 
     public MapRegulation Regulation { get; init; } = new();
 
+    public MapPickSettings MapPick { get; init; } = new();
+
     public RoomKeeping Keeping { get; init; } = new();
 
     // Said for !info and !help. ${version} becomes BotVersion. Lines are split on \n.
