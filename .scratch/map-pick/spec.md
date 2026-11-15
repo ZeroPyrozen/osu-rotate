@@ -18,7 +18,7 @@ silent and drops it from `!help`.
 2. **Source: live osu! search** (`GET /beatmapsets/search`). The room's own match history as a
    source is a later idea, not this feature.
 3. **An in-memory pool.** The bot fetches a few pages of matching maps into memory and each
-   `!pick` draws one at random, without handing out the same map twice. The pool refills when it
+   `!pick` draws one at random, without handing out the same map set twice (issue 08). The pool refills when it
    runs out (issue 03), and is thrown away when the rules or the oldest year change. Nothing is written to
    disk; a restart starts with an empty pool.
 4. **Ranked and approved maps only**, ranked in or after an oldest year (default 2012).
@@ -67,4 +67,4 @@ capped at 10000, so randomness comes from the sort order and how many pages are 
 ## Issues
 
 01 comes first. 02 and 04 can start alongside it. 03 needs 01. 05 needs 03 and 04. 06 needs 02.
-07 needs 05 and 06 and closes the feature.
+07 needs 05 and 06 and closes the feature. 08 came from the live trial.
