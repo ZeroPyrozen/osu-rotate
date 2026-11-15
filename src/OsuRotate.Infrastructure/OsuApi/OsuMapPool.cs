@@ -6,7 +6,7 @@ using OsuRotate.Domain;
 namespace OsuRotate.Infrastructure.OsuApi;
 
 // IMapPool over GET /api/v2/beatmapsets/search (map pick, issue 03). A fill searches with the limits,
-// keeps every difficulty that really fits, and draws from them at random without handing a map out
+// keeps every difficulty that really fits, and draws from them at random without handing a set out
 // twice. The pool lives in memory only and is thrown away when the query changes.
 //
 // What the probe saw live (issue 01) shapes this: the search's filters match whole sets, so each
@@ -26,7 +26,10 @@ public sealed class OsuMapPool(OsuApiClient api, Random? random = null) : IMapPo
     private readonly Random _random = random ?? Random.Shared;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly List<BeatmapInfo> _pool = [];
-    private readonly HashSet<int> _handedOut = [];
+    // Sets, not maps: the difficulties of one set are the same song, so a set is handed out once per
+    // round. Live on 2026-11-15, two picks in a row came from one set when this held map ids.
+    private readonly HashSet<int> _handedOutSets = [];
+    private int _lastSetId;
     private MapPickQuery? _query;
 
     public async ValueTask<MapPickResult> DrawAsync(MapPickQuery query, IReadOnlySet<int> skip, CancellationToken cancellationToken)
@@ -38,10 +41,12 @@ public sealed class OsuMapPool(OsuApiClient api, Random? random = null) : IMapPo
             {
                 _query = query;
                 _pool.Clear();
-                _handedOut.Clear();
+                _handedOutSets.Clear();
             }
 
-            _pool.RemoveAll(map => skip.Contains(map.Id));
+            // A map the room just played rules out its whole set.
+            var skippedInPool = SetsOf(_pool, skip);
+            _pool.RemoveAll(map => skippedInPool.Contains(map.BeatmapsetId));
             if (_pool.Count == 0)
             {
                 if (await FillAsync(query, cancellationToken).ConfigureAwait(false) is not { } found)
@@ -49,14 +54,18 @@ public sealed class OsuMapPool(OsuApiClient api, Random? random = null) : IMapPo
                     return new MapPickResult(MapPickOutcome.Failed);
                 }
 
-                var usable = found.Where(map => !skip.Contains(map.Id)).DistinctBy(map => map.Id).ToList();
-                var fresh = usable.Where(map => !_handedOut.Contains(map.Id)).ToList();
+                var skippedSets = SetsOf(found, skip);
+                var usable = found.Where(map => !skippedSets.Contains(map.BeatmapsetId)).DistinctBy(map => map.Id).ToList();
+                var fresh = usable.Where(map => !_handedOutSets.Contains(map.BeatmapsetId)).ToList();
 
-                // Everything the search gave was handed out already: start the round over.
+                // Every set the search gave was handed out already: start the round over, but not with
+                // the set just handed out, unless it is the only one.
                 if (fresh.Count == 0)
                 {
-                    _handedOut.Clear();
-                    fresh = usable;
+                    _handedOutSets.Clear();
+                    fresh = usable.Any(map => map.BeatmapsetId != _lastSetId)
+                        ? [.. usable.Where(map => map.BeatmapsetId != _lastSetId)]
+                        : usable;
                 }
 
                 _pool.AddRange(fresh);
@@ -67,10 +76,15 @@ public sealed class OsuMapPool(OsuApiClient api, Random? random = null) : IMapPo
                 return new MapPickResult(MapPickOutcome.NoneFit);
             }
 
-            var index = _random.Next(_pool.Count);
-            var picked = _pool[index];
-            _pool.RemoveAt(index);
-            _handedOut.Add(picked.Id);
+            // A random set, then a random difficulty in it, so a set with many fitting difficulties
+            // comes up no more often than one with a single one.
+            var sets = _pool.Select(map => map.BeatmapsetId).Distinct().ToList();
+            var setId = sets[_random.Next(sets.Count)];
+            var difficulties = _pool.Where(map => map.BeatmapsetId == setId).ToList();
+            var picked = difficulties[_random.Next(difficulties.Count)];
+            _pool.RemoveAll(map => map.BeatmapsetId == setId);
+            _handedOutSets.Add(setId);
+            _lastSetId = setId;
             return MapPickResult.Found(picked);
         }
         finally
@@ -78,6 +92,10 @@ public sealed class OsuMapPool(OsuApiClient api, Random? random = null) : IMapPo
             _gate.Release();
         }
     }
+
+    // The sets of the maps in skip that the pool knows; a skipped map from elsewhere has no known set.
+    private static HashSet<int> SetsOf(IEnumerable<BeatmapInfo> maps, IReadOnlySet<int> skip) =>
+        [.. maps.Where(map => skip.Contains(map.Id)).Select(map => map.BeatmapsetId)];
 
     // Null when the first page fails. A later failure keeps what was already seen, and so does a
     // search that ends before the skipped pages, so narrow rules still get their few maps.

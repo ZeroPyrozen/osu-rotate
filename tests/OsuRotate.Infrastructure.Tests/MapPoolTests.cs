@@ -126,36 +126,83 @@ public sealed class MapPoolTests : IDisposable
     [Fact]
     public async Task Hands_out_each_map_once_and_searches_once_for_the_whole_pool()
     {
-        Serve(Path(Query), null, Set(10, "A", 2015, "ranked", Map(101, 4.1), Map(102, 4.2)), Set(11, "B", 2016, "ranked", Map(111, 4.3)));
+        Serve(Path(Query), null, Set(10, "A", 2015, "ranked", Map(101, 4.1)), Set(11, "B", 2016, "ranked", Map(111, 4.3)), Set(12, "C", 2017, "ranked", Map(121, 4.4)));
         var pool = Pool();
 
         var ids = await DrawIdsAsync(pool, 3);
 
-        Assert.Equal([101, 102, 111], ids.Order());
+        Assert.Equal([101, 111, 121], ids.Order());
+        Assert.Equal(1, _api.ApiRequests);
+    }
+
+    // Live, 2026-11-15: two picks in a row were different difficulties of the same set.
+    [Fact]
+    public async Task Hands_out_one_difficulty_per_set()
+    {
+        Serve(Path(Query), null,
+            Set(10, "A", 2015, "ranked", Map(101, 4.1), Map(102, 4.2), Map(103, 4.3)),
+            Set(11, "B", 2016, "ranked", Map(111, 4.3), Map(112, 4.4)));
+        var pool = Pool();
+
+        var first = await pool.DrawAsync(Query, NoSkip, default);
+        var second = await pool.DrawAsync(Query, NoSkip, default);
+
+        Assert.NotEqual(first.Beatmap!.BeatmapsetId, second.Beatmap!.BeatmapsetId);
         Assert.Equal(1, _api.ApiRequests);
     }
 
     [Fact]
-    public async Task Once_every_map_was_handed_out_it_searches_again_and_starts_over()
+    public async Task Once_every_set_was_handed_out_it_searches_again_and_starts_over()
     {
-        Serve(Path(Query), null, Set(10, "A", 2015, "ranked", Map(101, 4.1), Map(102, 4.2)));
+        Serve(Path(Query), null, Set(10, "A", 2015, "ranked", Map(101, 4.1)), Set(11, "B", 2016, "ranked", Map(111, 4.2)));
         var pool = Pool();
 
+        // Sort 0, no pages skipped, then set B first, so A is handed out last and is the set the
+        // new round would draw first.
+        _random.Script.Enqueue(0);
+        _random.Script.Enqueue(0);
+        _random.Script.Enqueue(1);
         var ids = await DrawIdsAsync(pool, 3);
 
-        Assert.Equal(2, ids.Take(2).Distinct().Count());
-        Assert.Contains(ids[2], new[] { 101, 102 });
+        Assert.Equal([111, 101, 111], ids);
         Assert.Equal(2, _api.ApiRequests);
+    }
+
+    [Fact]
+    public async Task With_a_single_set_it_hands_that_set_out_again()
+    {
+        Serve(Path(Query), null, Set(10, "A", 2015, "ranked", Map(101, 4.1)));
+
+        Assert.Equal([101, 101], await DrawIdsAsync(Pool(), 2));
     }
 
     [Fact]
     public async Task Skipped_maps_are_never_drawn()
     {
-        Serve(Path(Query), null, Set(10, "A", 2015, "ranked", Map(101, 4.1), Map(102, 4.2)));
+        Serve(Path(Query), null, Set(10, "A", 2015, "ranked", Map(101, 4.1)), Set(11, "B", 2016, "ranked", Map(111, 4.2)));
 
         var ids = await DrawIdsAsync(Pool(), 2, skip: new HashSet<int> { 101 });
 
-        Assert.Equal([102, 102], ids);
+        Assert.Equal([111, 111], ids);
+    }
+
+    // A map the room just played rules out the rest of its set too: it is the same song.
+    [Fact]
+    public async Task A_skipped_map_skips_its_whole_set()
+    {
+        Serve(Path(Query), null, Set(10, "A", 2015, "ranked", Map(101, 4.1), Map(102, 4.2)), Set(11, "B", 2016, "ranked", Map(111, 4.3)));
+
+        var ids = await DrawIdsAsync(Pool(), 2, skip: new HashSet<int> { 101 });
+
+        Assert.Equal([111, 111], ids);
+    }
+
+    [Fact]
+    public async Task A_set_whose_only_fitting_map_was_skipped_is_none_fit()
+    {
+        Serve(Path(Query), null, Set(10, "A", 2015, "ranked", Map(101, 4.1), Map(102, 4.2)));
+
+        Assert.Equal(new MapPickResult(MapPickOutcome.NoneFit), await Pool().DrawAsync(Query, new HashSet<int> { 101 }, default));
     }
 
     [Fact]
@@ -239,11 +286,11 @@ public sealed class MapPoolTests : IDisposable
         _random.Script.Enqueue(2);
         Serve(Path(Query, "plays_desc"), "c1", Set(10, "P1", 2015, "ranked", Map(101, 4.1)));
         Serve(Path(Query, "plays_desc", "c1"), "c2", Set(20, "P2", 2015, "ranked", Map(201, 4.1)));
-        Serve(Path(Query, "plays_desc", "c2"), "c3", Set(30, "P3", 2015, "ranked", Map(301, 4.1), Map(302, 4.2)));
+        Serve(Path(Query, "plays_desc", "c2"), "c3", Set(30, "P3", 2015, "ranked", Map(301, 4.1)), Set(31, "P3b", 2015, "ranked", Map(311, 4.2)));
 
         var ids = await DrawIdsAsync(Pool(), 2);
 
-        Assert.Equal([301, 302], ids.Order());
+        Assert.Equal([301, 311], ids.Order());
         Assert.Equal(3, _api.ApiRequests);
     }
 
