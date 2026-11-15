@@ -124,8 +124,56 @@ internal sealed class RecordingArchive : IMatchArchive
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask<IReadOnlyList<ArchivedMatch>> RecentAsync(int count, CancellationToken cancellationToken) =>
-        ValueTask.FromResult<IReadOnlyList<ArchivedMatch>>([]);
+    // What RecentAsync answers, newest first.
+    public List<ArchivedMatch> Recent { get; } = [];
+
+    public ConcurrentQueue<int> RecentAsked { get; } = new();
+
+    public bool FailRecent { get; set; }
+
+    public ValueTask<IReadOnlyList<ArchivedMatch>> RecentAsync(int count, CancellationToken cancellationToken)
+    {
+        RecentAsked.Enqueue(count);
+        if (FailRecent)
+        {
+            throw new IOException("archive down");
+        }
+
+        return ValueTask.FromResult<IReadOnlyList<ArchivedMatch>>([.. Recent.Take(count)]);
+    }
+}
+
+internal sealed class FakePool : IMapPool
+{
+    private TaskCompletionSource<MapPickResult>? _pending;
+
+    public ConcurrentQueue<(MapPickQuery Query, IReadOnlySet<int> Skip)> Asked { get; } = new();
+
+    // While true, draws wait for Answer.
+    public bool Hold { get; set; }
+
+    public bool Throw { get; set; }
+
+    public static BeatmapInfo Map(int id) => new(id, id * 10, $"title {id}", GameMode.Osu, 5, 120, "ranked");
+
+    public ValueTask<MapPickResult> DrawAsync(MapPickQuery query, IReadOnlySet<int> skip, CancellationToken cancellationToken)
+    {
+        Asked.Enqueue((query, skip));
+        if (Throw)
+        {
+            throw new HttpRequestException("api down");
+        }
+
+        if (!Hold)
+        {
+            return ValueTask.FromResult(MapPickResult.Found(Map(500)));
+        }
+
+        _pending = new TaskCompletionSource<MapPickResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        return new ValueTask<MapPickResult>(_pending.Task.WaitAsync(cancellationToken));
+    }
+
+    public void Answer() => _pending!.TrySetResult(MapPickResult.Found(Map(500)));
 }
 
 // Serves a scripted match history: the kicks to show and where the history ends.
@@ -168,6 +216,8 @@ internal sealed class RecordingDiagnostics : ILobbyDiagnostics
     public void SendFailed(LobbyCommand command, Exception exception) => Reports.Enqueue($"send {command.GetType().Name}");
 
     public void LookupFailed(int beatmapId, Exception exception) => Reports.Enqueue($"lookup {beatmapId}");
+
+    public void PickFailed(Exception exception) => Reports.Enqueue($"pick {exception.GetType().Name}");
 
     public void EventsEnded(Exception? exception) => Reports.Enqueue($"ended {exception?.Message ?? "cleanly"}");
 

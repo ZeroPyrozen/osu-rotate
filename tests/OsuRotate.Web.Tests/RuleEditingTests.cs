@@ -45,6 +45,7 @@ public class RuleEditingTests
                 AutoStartEnabled = true,
                 InfoAnnouncementInterval = TimeSpan.FromMinutes(5),
                 Regulation = Defaults.Regulation with { StarMin = 4.5, StarMax = 6.25, LengthMaxSeconds = 300, Mode = GameMode.Mania, AllowConvert = false },
+                MapPick = new MapPickSettings { Enabled = true, OldestRankedYear = 2018 },
             };
             Assert.Equal(settings, RuleForm.From(settings).ToSettings(settings).Settings);
             Assert.Equal(Defaults, RuleForm.From(Defaults).ToSettings(Defaults).Settings);
@@ -92,6 +93,8 @@ public class RuleEditingTests
             form.HostKickCheckIntervalSeconds = 15;
             form.InfoMessage = "one\r\ntwo\r\n";
             form.InfoAnnouncementIntervalSeconds = 600;
+            form.PickEnabled = true;
+            form.PickOldestRankedYear = 2016;
 
             var expected = Defaults with
             {
@@ -117,6 +120,7 @@ public class RuleEditingTests
                 HostKickCheckInterval = TimeSpan.FromSeconds(15),
                 InfoMessage = "one\ntwo",
                 InfoAnnouncementInterval = TimeSpan.FromMinutes(10),
+                MapPick = new MapPickSettings { Enabled = true, OldestRankedYear = 2016 },
             };
             Assert.Equal(expected, form.ToSettings(Defaults).Settings);
         }
@@ -223,6 +227,35 @@ public class RuleEditingTests
         }
 
         [Fact]
+        public async Task Map_picks_can_be_turned_on_from_the_dashboard()
+        {
+            await using var lobby = new TestLobby();
+            var form = RuleForm.From(lobby.Snapshot.Settings);
+            Assert.False(form.PickEnabled);
+            Assert.Equal(2012, form.PickOldestRankedYear);
+            form.PickEnabled = true;
+            form.PickOldestRankedYear = 2015;
+
+            Assert.Null(await new RuleActions(lobby.Runtime).SaveAsync(form));
+            await TestLobby.WaitUntilAsync(() => lobby.Snapshot.Settings.MapPick == new MapPickSettings { Enabled = true, OldestRankedYear = 2015 });
+        }
+
+        [Theory]
+        [InlineData(2006, "from 2007")]
+        [InlineData(2027, "after 2026")]
+        public async Task An_oldest_ranked_year_outside_osus_years_is_refused(int year, string expected)
+        {
+            await using var lobby = new TestLobby();
+            var time = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(new DateTimeOffset(2026, 11, 15, 0, 0, 0, TimeSpan.Zero));
+            var form = RuleForm.From(lobby.Snapshot.Settings);
+            form.PickOldestRankedYear = year;
+
+            Assert.Contains(expected, await new RuleActions(lobby.Runtime, time).SaveAsync(form), StringComparison.Ordinal);
+            await lobby.Actor.DrainAsync().WaitAsync(TestLobby.Timeout);
+            Assert.Equal(2012, lobby.Snapshot.Settings.MapPick.OldestRankedYear);
+        }
+
+        [Fact]
         public async Task Before_the_bot_runs_saving_says_so()
         {
             Assert.Equal(LifecycleActions.NotRunning, await new RuleActions(new LobbyRuntime()).SaveAsync(RuleForm.From(Defaults)));
@@ -307,6 +340,15 @@ public class RuleEditingTests
             Assert.Contains("data-dirty=\"no\"", html, StringComparison.Ordinal);
             Assert.Contains("No changes", html, StringComparison.Ordinal);
             Assert.Matches("<button type=\"submit\" disabled[^>]*>Save rules</button>", html);
+        }
+
+        [Fact]
+        public async Task Map_picks_have_their_own_section()
+        {
+            var html = await RenderAsync(Defaults with { MapPick = new MapPickSettings { OldestRankedYear = 2017 } });
+            Assert.Contains("<legend>Map picks</legend>", html, StringComparison.Ordinal);
+            Assert.Contains("value=\"2017\"", html, StringComparison.Ordinal);
+            Assert.Contains("min=\"2007\"", html, StringComparison.Ordinal);
         }
 
         [Fact]

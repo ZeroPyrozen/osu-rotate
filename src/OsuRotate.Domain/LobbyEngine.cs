@@ -256,6 +256,10 @@ public sealed partial class LobbyEngine
                 MapsOnLookedUp(e.BeatmapId, e.Result);
                 break;
 
+            case BeatmapPicked e:
+                PickOnAnswered(e);
+                break;
+
             case MatchStarted:
                 Room.StartMatch();
                 HistoryOnMatchStarted();
@@ -457,6 +461,9 @@ public sealed partial class LobbyEngine
                 return;
             case "!rank":
                 ShowRank(player?.Name ?? username);
+                return;
+            case "!pick" or "!suggest":
+                OnPickCommand(player?.Name ?? username);
                 return;
             case "!skip":
                 OnSkipCommand(player, command.Argument);

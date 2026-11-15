@@ -225,6 +225,26 @@ internal sealed class LobbyHarness
         }
     }
 
+    // What the map pool answers to !pick, in turn. Once empty, map 500: 5 stars, 2 minutes.
+    public Queue<MapPickResult> PickResults { get; } = new();
+
+    // While false, picks wait for AnswerPicks, as when the osu! API is slow.
+    public bool AnswerPicksAtOnce { get; set; } = true;
+
+    public List<PickBeatmap> PendingPicks { get; } = [];
+
+    public void AnswerPicks()
+    {
+        var picks = PendingPicks.ToList();
+        PendingPicks.Clear();
+        foreach (var pick in picks)
+        {
+            Feed(new BeatmapPicked(pick, NextPick()));
+        }
+    }
+
+    private MapPickResult NextPick() => PickResults.TryDequeue(out var result) ? result : MapPickResult.Found(Map(500));
+
     // The host picking a map in the game.
     public void PickMap(int id)
     {
@@ -339,6 +359,12 @@ internal sealed class LobbyHarness
                 break;
             case LookUpBeatmap c:
                 PendingLookups.Add(c);
+                break;
+            case PickBeatmap c when AnswerPicksAtOnce:
+                yield return new BeatmapPicked(c, NextPick());
+                break;
+            case PickBeatmap c:
+                PendingPicks.Add(c);
                 break;
             case SetBeatmap c:
                 yield return new BeatmapChanged(c.BeatmapId, $"title {c.BeatmapId}", true);

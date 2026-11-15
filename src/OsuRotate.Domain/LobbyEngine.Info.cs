@@ -15,7 +15,8 @@ public sealed partial class LobbyEngine
     private BeatmapInfo? _currentMap;
     private int _mirrorPendingFor;
 
-    private string InfoMessage => _settings.InfoMessage.Replace(VersionPlaceholder, _settings.BotVersion, StringComparison.Ordinal);
+    private string InfoMessage => _settings.InfoMessage.Replace(VersionPlaceholder, _settings.BotVersion, StringComparison.Ordinal)
+        + (_settings.MapPick.Enabled ? "\n" + PickHelp : string.Empty);
 
     private void ShowInfo()
     {

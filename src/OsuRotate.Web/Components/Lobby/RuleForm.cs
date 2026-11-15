@@ -62,6 +62,9 @@ public sealed class RuleForm
     public string InfoMessage { get; set; } = string.Empty;
     public int InfoAnnouncementIntervalSeconds { get; set; }
 
+    public bool PickEnabled { get; set; }
+    public int PickOldestRankedYear { get; set; }
+
     // A copy that later edits to this form do not touch.
     public RuleForm Clone() => (RuleForm)MemberwiseClone();
 
@@ -123,6 +126,8 @@ public sealed class RuleForm
             HostKickCheckIntervalSeconds = Seconds(s.HostKickCheckInterval),
             InfoMessage = s.InfoMessage,
             InfoAnnouncementIntervalSeconds = Seconds(s.InfoAnnouncementInterval),
+            PickEnabled = s.MapPick.Enabled,
+            PickOldestRankedYear = s.MapPick.OldestRankedYear,
         };
     }
 
@@ -204,6 +209,7 @@ public sealed class RuleForm
             // Browsers send line breaks as \r\n; the lobby splits lines on \n.
             InfoMessage = InfoMessage.Replace("\r\n", "\n", StringComparison.Ordinal).Trim(),
             InfoAnnouncementInterval = TimeSpan.FromSeconds(InfoAnnouncementIntervalSeconds),
+            MapPick = new MapPickSettings { Enabled = PickEnabled, OldestRankedYear = PickOldestRankedYear },
         };
         return (settings, null);
     }
@@ -212,8 +218,10 @@ public sealed class RuleForm
 }
 
 // UC8: save the edited rules. Checked here so the owner sees why; the engine checks again.
-public sealed class RuleActions(LobbyRuntime runtime)
+public sealed class RuleActions(LobbyRuntime runtime, TimeProvider? time = null)
 {
+    private readonly TimeProvider _time = time ?? TimeProvider.System;
+
     public async Task<string?> SaveAsync(RuleForm form, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(form);
@@ -228,7 +236,14 @@ public sealed class RuleActions(LobbyRuntime runtime)
             return problem;
         }
 
-        var problems = SettingsRules.Validate(settings);
+        // The lobby only refuses years past 2100; here a year with no ranked maps yet is refused too.
+        var problems = SettingsRules.Validate(settings).ToList();
+        var thisYear = _time.GetUtcNow().Year;
+        if (settings.MapPick.OldestRankedYear > thisYear && settings.MapPick.OldestRankedYear <= MapPickSettings.LastAllowedYear)
+        {
+            problems.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"The oldest ranked year can't be after {thisYear}."));
+        }
+
         if (problems.Count > 0)
         {
             return string.Join(' ', problems);

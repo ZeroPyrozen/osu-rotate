@@ -29,6 +29,12 @@
             </fieldset>
 
             <fieldset class="settings-section">
+                <legend>Map picks</legend>
+                <ToggleRow Label="!pick finds a map" Hint="The host's !pick sets a map that fits the rules above; anyone else's is a suggestion" @bind-Value="_form.PickEnabled" />
+                <NumberRow Label="Oldest ranked year" Hint="Only maps ranked in or after this year are picked" Min="MapPickSettings.FirstRankedYear" Max="DateTime.UtcNow.Year" @bind-Value="_form.PickOldestRankedYear" />
+            </fieldset>
+
+            <fieldset class="settings-section">
                 <legend>Room</legend>
                 <label class="form-row text-row">
                     <span class="form-text">

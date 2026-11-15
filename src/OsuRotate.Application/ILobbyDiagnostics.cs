@@ -12,6 +12,9 @@ public interface ILobbyDiagnostics
 
     void LookupFailed(int beatmapId, Exception exception);
 
+    // The map pool or the match archive failed while answering !pick.
+    void PickFailed(Exception exception);
+
     void EventsEnded(Exception? exception);
 
     // The lobby went on without saving; the next change tries again.
@@ -45,6 +48,10 @@ public sealed class NoLobbyDiagnostics : ILobbyDiagnostics
     }
 
     public void LookupFailed(int beatmapId, Exception exception)
+    {
+    }
+
+    public void PickFailed(Exception exception)
     {
     }
 

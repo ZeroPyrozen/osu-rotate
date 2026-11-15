@@ -20,6 +20,7 @@ public sealed class LobbyActor
     private LobbyEngine _engine;
     private readonly ILobbyTransport _transport;
     private readonly IBeatmapCatalog _catalog;
+    private readonly IMapPool? _pool;
     private readonly TimeProvider _time;
     private readonly ILobbyDiagnostics _diagnostics;
     private readonly Channel<Envelope> _inbox = Channel.CreateUnbounded<Envelope>(new UnboundedChannelOptions { SingleReader = true });
@@ -34,8 +35,10 @@ public sealed class LobbyActor
         LobbyLifecycle? lifecycle = null,
         ILobbyStore? store = null,
         IMatchArchive? archive = null,
-        IMatchHistory? history = null)
+        IMatchHistory? history = null,
+        IMapPool? pool = null)
     {
+        _pool = pool;
         _archive = archive;
         _history = history ?? NoMatchHistory.Instance;
         _engine = engine;
@@ -306,6 +309,10 @@ public sealed class LobbyActor
             {
                 _ = LookUpAsync(lookup, cancellationToken);
             }
+            else if (command is PickBeatmap pick)
+            {
+                _ = PickAsync(pick, RecentlyPlayedNotSaved(), cancellationToken);
+            }
             else
             {
                 if (command is Say announcement)
@@ -424,6 +431,59 @@ public sealed class LobbyActor
         }
 
         _inbox.Writer.TryWrite(new Envelope(new BanchoEvent(new BeatmapLookedUp(lookup.BeatmapId, result)), null));
+    }
+
+    // !pick skips the maps of the room's last 20 matches (map pick, issue 05).
+    public const int RecentMatchesSkipped = 20;
+
+    // Matches whose save failed are not in the archive yet but were still just played. Read on the loop.
+    private int[] RecentlyPlayedNotSaved() => [.. _unsavedMatches.Select(m => m.Match.BeatmapId)];
+
+    // Runs beside the loop like a lookup. A history that can't be read only means nothing is skipped.
+    private async Task PickAsync(PickBeatmap pick, int[] unsaved, CancellationToken cancellationToken)
+    {
+        MapPickResult result;
+        try
+        {
+            var skip = new HashSet<int>(unsaved);
+            if (_archive is not null)
+            {
+                try
+                {
+                    foreach (var played in await _archive.RecentAsync(RecentMatchesSkipped, cancellationToken).ConfigureAwait(false))
+                    {
+                        skip.Add(played.Match.BeatmapId);
+                    }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+#pragma warning disable CA1031 // The history only narrows the pick.
+                catch (Exception exception)
+#pragma warning restore CA1031
+                {
+                    _diagnostics.PickFailed(exception);
+                }
+            }
+
+            result = _pool is null
+                ? new MapPickResult(MapPickOutcome.Failed)
+                : await _pool.DrawAsync(pick.Query, skip, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+#pragma warning disable CA1031 // The pool should not throw, but if it does the player is told it failed.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            _diagnostics.PickFailed(exception);
+            result = new MapPickResult(MapPickOutcome.Failed);
+        }
+
+        _inbox.Writer.TryWrite(new Envelope(new BanchoEvent(new BeatmapPicked(pick, result)), null));
     }
 
     // Runs beside the loop like a lookup. No answer is fine: the engine asks again later.

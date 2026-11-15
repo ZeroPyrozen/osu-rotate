@@ -19,7 +19,7 @@ silent and drops it from `!help`.
    source is a later idea, not this feature.
 3. **An in-memory pool.** The bot fetches a few pages of matching maps into memory and each
    `!pick` draws one at random, without handing out the same map twice. The pool refills when it
-   runs low, and is thrown away when the rules or the oldest year change. Nothing is written to
+   runs out (issue 03), and is thrown away when the rules or the oldest year change. Nothing is written to
    disk; a restart starts with an empty pool.
 4. **Ranked and approved maps only**, ranked in or after an oldest year (default 2012).
 5. **The oldest year is a pick setting**, not part of the regulation. Hosts may still pick older
@@ -54,8 +54,8 @@ silent and drops it from `!help`.
 
 ## Open
 
-- Pool size and refill threshold: start with one or two pages (70 to 200 fitting difficulties per
-  page, issue 01) and refill below 10 left; adjust after the live check.
+- Pool size: one kept page per fill (70 to 200 fitting difficulties, issue 01), refilled when empty
+  (issue 03); adjust after the live check.
 - Whether `s=ranked` includes approved maps (only ranked ones were seen).
 
 ## Settled by issue 01

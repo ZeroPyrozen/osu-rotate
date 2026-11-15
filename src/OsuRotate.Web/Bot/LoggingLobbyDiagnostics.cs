@@ -13,6 +13,8 @@ internal sealed partial class LoggingLobbyDiagnostics(ILogger<LoggingLobbyDiagno
 
     public void LookupFailed(int beatmapId, Exception exception) => LogLookupFailed(logger, beatmapId, exception);
 
+    public void PickFailed(Exception exception) => LogPickFailed(logger, exception);
+
     public void EventsEnded(Exception? exception)
     {
         if (exception is null)
@@ -57,6 +59,9 @@ internal sealed partial class LoggingLobbyDiagnostics(ILogger<LoggingLobbyDiagno
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Looking up beatmap {BeatmapId} failed; the map is let through.")]
     private static partial void LogLookupFailed(ILogger logger, int beatmapId, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Finding a map for !pick failed.")]
+    private static partial void LogPickFailed(ILogger logger, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The Bancho connection has stopped for good (for example, wrong IRC credentials).")]
     private static partial void LogEventsEnded(ILogger logger);
