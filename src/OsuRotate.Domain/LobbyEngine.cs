@@ -47,6 +47,8 @@ public sealed record LobbySettings
 
     public MapRegulation Regulation { get; init; } = new();
 
+    public MapPickSettings MapPick { get; init; } = new();
+
     public RoomKeeping Keeping { get; init; } = new();
 
     // Said for !info and !help. ${version} becomes BotVersion. Lines are split on \n.
@@ -254,6 +256,10 @@ public sealed partial class LobbyEngine
                 MapsOnLookedUp(e.BeatmapId, e.Result);
                 break;
 
+            case BeatmapPicked e:
+                PickOnAnswered(e);
+                break;
+
             case MatchStarted:
                 Room.StartMatch();
                 HistoryOnMatchStarted();
@@ -455,6 +461,9 @@ public sealed partial class LobbyEngine
                 return;
             case "!rank":
                 ShowRank(player?.Name ?? username);
+                return;
+            case "!pick" or "!suggest":
+                OnPickCommand(player?.Name ?? username);
                 return;
             case "!skip":
                 OnSkipCommand(player, command.Argument);

@@ -37,6 +37,11 @@ public sealed record LookUpBeatmap(int BeatmapId, GameMode Mode, bool AllowConve
 // page when null), fed back as MatchHistoryRead. Never send it to the transport.
 public sealed record ReadMatchHistory(long? AfterEventId) : LobbyCommand;
 
+// Answered by the application from the map pool (IMapPool): one map for !pick, fed back as
+// BeatmapPicked. AsHost says whether the requester was host, so the map is set rather than suggested.
+// Never send it to the transport.
+public sealed record PickBeatmap(string Requester, bool AsHost, MapPickQuery Query) : LobbyCommand;
+
 // Also answered by the application: save the match to the history. Never send it to the transport.
 public sealed record RecordMatch(MatchRecord Match) : LobbyCommand;
 

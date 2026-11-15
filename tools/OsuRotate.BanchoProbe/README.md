@@ -24,3 +24,4 @@ A full run takes about 10 minutes, 6 of which are an idle listening period. The 
 | `--keep-room` | Leaves the room open, to test whether an empty room survives for days |
 | `--check-room ID` | Checks a kept room later, then closes it |
 | `--host`, `--port` | Connects somewhere other than Bancho |
+| `--search` | Only checks osu!'s beatmap search with the OAuth client (no IRC, no room), for the map pick feature. Writes `artifacts/probe/search-*.md` |

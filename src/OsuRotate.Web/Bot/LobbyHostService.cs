@@ -101,7 +101,8 @@ internal sealed partial class LobbyHostService(
             recovered.Lifecycle,
             store,
             store,
-            history);
+            history,
+            new OsuMapPool(api));
         LogStarted(_logger, Version, recovered.Session?.RoomId.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none", recovered.MatchRunning);
 
         runtime.Attach(actor);

@@ -13,6 +13,7 @@ public sealed class LobbyActorTests : IAsyncDisposable
     private readonly RecordingStore _store;
     private readonly RecordingArchive _archive = new();
     private readonly ScriptedHistory _history = new();
+    private readonly FakePool _pool = new();
     private readonly CancellationTokenSource _stop = new();
     private LobbyActor? _actor;
 
@@ -23,7 +24,7 @@ public sealed class LobbyActorTests : IAsyncDisposable
     {
         var settings = new LobbySettings { OwnerName = "creator", HostAfkCheckInterval = TimeSpan.Zero };
         var engine = new LobbyEngine(configure?.Invoke(settings) ?? settings, _time);
-        _actor = new LobbyActor(engine, _transport, _catalog, _time, _diagnostics, store: _store, archive: _archive, history: _history);
+        _actor = new LobbyActor(engine, _transport, _catalog, _time, _diagnostics, store: _store, archive: _archive, history: _history, pool: _pool);
         _run = _actor.RunAsync(_stop.Token);
         return _actor;
     }
@@ -196,6 +197,71 @@ public sealed class LobbyActorTests : IAsyncDisposable
         Assert.Equal(100, Assert.Single(sent.OfType<SetBeatmap>()).BeatmapId);
         Assert.Equal([100], _catalog.Asked);
         Assert.DoesNotContain(sent, c => c is LookUpBeatmap);
+    }
+
+    private static LobbySettings WithPicks(LobbySettings settings) => settings with { MapPick = new MapPickSettings { Enabled = true } };
+
+    private ArchivedMatch Played(long id, int beatmapId) =>
+        new(id, 1, new MatchRecord(beatmapId, "p1", null, _time.GetUtcNow(), _time.GetUtcNow(), MatchOutcome.Finished, []));
+
+    [Fact]
+    public async Task The_hosts_pick_goes_to_the_pool_skipping_the_last_20_matches_and_sets_the_map()
+    {
+        await StartWithPlayersAsync(WithPicks);
+        _archive.Recent.AddRange([Played(3, 31), Played(2, 21), Played(1, 11)]);
+
+        _transport.Emit(new ChatReceived("p1", "!pick", false));
+
+        var sent = await _transport.WaitForAsync(s => s.OfType<SetBeatmap>().Any());
+        Assert.Equal(500, Assert.Single(sent.OfType<SetBeatmap>()).BeatmapId);
+        Assert.DoesNotContain(sent, c => c is PickBeatmap);
+        var (query, skip) = Assert.Single(_pool.Asked);
+        Assert.Equal(2012, query.OldestRankedYear);
+        Assert.Equal([11, 21, 31], skip.Order());
+        Assert.Equal([LobbyActor.RecentMatchesSkipped], _archive.RecentAsked);
+        Assert.Equal(20, LobbyActor.RecentMatchesSkipped);
+    }
+
+    [Fact]
+    public async Task A_failing_pool_is_reported_and_answered_as_failed()
+    {
+        await StartWithPlayersAsync(WithPicks);
+        _pool.Throw = true;
+
+        _transport.Emit(new ChatReceived("p2", "!pick", false));
+
+        var sent = await _transport.WaitForAsync(s => s.OfType<Say>().Any());
+        Assert.Contains(sent.OfType<Say>(), s => s.Text.StartsWith("Couldn't reach osu!", StringComparison.Ordinal));
+        Assert.Contains("pick HttpRequestException", _diagnostics.Reports);
+    }
+
+    [Fact]
+    public async Task An_unreadable_history_still_picks_without_skipping()
+    {
+        await StartWithPlayersAsync(WithPicks);
+        _archive.FailRecent = true;
+
+        _transport.Emit(new ChatReceived("p2", "!pick", false));
+
+        var sent = await _transport.WaitForAsync(s => s.OfType<Say>().Any());
+        Assert.Contains(sent.OfType<Say>(), s => s.Text.StartsWith("Suggestion from p2", StringComparison.Ordinal));
+        Assert.Empty(Assert.Single(_pool.Asked).Skip);
+    }
+
+    [Fact]
+    public async Task A_slow_pick_does_not_hold_up_the_lobby()
+    {
+        await StartWithPlayersAsync(WithPicks);
+        _pool.Hold = true;
+        _transport.Emit(new ChatReceived("p1", "!pick", false));
+        await WaitUntilAsync(() => !_pool.Asked.IsEmpty);
+
+        _transport.Emit(new ChatReceived("p2", "!q", false));
+        await _transport.WaitForAsync(sent => sent.OfType<Say>().Any());
+        Assert.DoesNotContain(_transport.Sent, c => c is SetBeatmap);
+
+        _pool.Answer();
+        await _transport.WaitForAsync(sent => sent.OfType<SetBeatmap>().Any());
     }
 
     [Fact]

@@ -20,6 +20,8 @@ public class SettingsEditTests
             { "star rating limits", Defaults with { Regulation = Defaults.Regulation with { StarMax = double.PositiveInfinity } } },
             { "highest star rating", Defaults with { Regulation = Defaults.Regulation with { StarMin = 5, StarMax = 4 } } },
             { "length in seconds limits", Defaults with { Regulation = Defaults.Regulation with { LengthMinSeconds = -1 } } },
+            { "oldest ranked year", Defaults with { MapPick = new MapPickSettings { OldestRankedYear = MapPickSettings.FirstRankedYear - 1 } } },
+            { "oldest ranked year", Defaults with { MapPick = new MapPickSettings { OldestRankedYear = MapPickSettings.LastAllowedYear + 1 } } },
             { "length in seconds limits", Defaults with { Regulation = Defaults.Regulation with { LengthMaxSeconds = SettingsRules.MaxLengthSeconds + 1 } } },
             { "highest length", Defaults with { Regulation = Defaults.Regulation with { LengthMinSeconds = 120, LengthMaxSeconds = 60 } } },
             { "game mode", Defaults with { Regulation = Defaults.Regulation with { Mode = (GameMode)4 } } },
@@ -71,6 +73,8 @@ public class SettingsEditTests
             Defaults with { Keeping = new RoomKeeping { Mode = new KeptMode(TeamMode.TagTeamVs, ScoreMode.ScoreV2), Size = KeepCommand.MaxSize, Mods = Mods.Freemod | Mods.DoubleTime, Password = "", Title = new string('x', RoomKeeping.MaxTitleLength) } },
             Defaults with { Keeping = new RoomKeeping { Password = new string('x', SettingsRules.MaxPasswordLength) } },
             Defaults with { SkipVote = new VoteRule(0, 1), StartVote = new VoteRule(1, 16) },
+            Defaults with { MapPick = new MapPickSettings { Enabled = true, OldestRankedYear = MapPickSettings.FirstRankedYear } },
+            Defaults with { MapPick = new MapPickSettings { OldestRankedYear = MapPickSettings.LastAllowedYear } },
             Defaults with { HostAfkFirstCheck = TimeSpan.Zero, HostAfkCheckInterval = SettingsRules.MaximumDelay, AfkKickThreshold = 1, AfkKickCooldown = SettingsRules.MinimumAfkKickCooldown },
             Defaults with { AutoStartDelay = LobbyEngine.MinimumAutoStartDelay, StuckMatchFinishedShare = 1, StuckMatchDelay = TimeSpan.Zero, HostKickTolerance = 0 },
             Defaults with { HostKickCheckInterval = SettingsRules.MinimumHostKickCheckInterval, InfoAnnouncementInterval = LobbyEngine.MinimumInfoAnnouncementInterval },
@@ -80,6 +84,13 @@ public class SettingsEditTests
         [Theory]
         [MemberData(nameof(Valid))]
         public void Values_at_the_limits_are_accepted(LobbySettings settings) => Assert.Empty(SettingsRules.Validate(settings));
+
+        [Fact]
+        public void Map_picks_start_off_and_go_back_to_2012()
+        {
+            Assert.False(Defaults.MapPick.Enabled);
+            Assert.Equal(2012, Defaults.MapPick.OldestRankedYear);
+        }
 
         [Fact]
         public void Every_problem_is_listed()

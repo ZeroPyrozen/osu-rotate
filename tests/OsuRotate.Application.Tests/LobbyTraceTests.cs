@@ -72,6 +72,11 @@ public class LobbyTraceTests
             "map 75 looked up: Found, Osu, 5.43*, 125 s"
         },
         { new BeatmapLookedUp(76, new BeatmapLookup(BeatmapLookupOutcome.NotFound)), "map 76 looked up: NotFound" },
+        {
+            new BeatmapPicked(new PickBeatmap("alice", true, new MapPickQuery(GameMode.Osu, 4, 6, 0, 0, 2012)), MapPickResult.Found(new BeatmapInfo(77, 1, "t", GameMode.Osu, 4.567, 130, "ranked"))),
+            "map pick for alice: 77, 4.57*, 130 s"
+        },
+        { new BeatmapPicked(new PickBeatmap("bob", false, new MapPickQuery(GameMode.Osu, 4, 6, 0, 0, 2012)), new MapPickResult(MapPickOutcome.NoneFit)), "map pick for bob: NoneFit" },
         { new MatchStarted(), "match started" },
         { new MatchFinished(), "match finished" },
         { new MatchAborted(), "match aborted" },
@@ -118,6 +123,8 @@ public class LobbyTraceTests
         { new SetSize(16), "!mp size 16" },
         { new SetRoomName("auto host"), "!mp name \"auto host\"" },
         { new LookUpBeatmap(75, GameMode.Osu, AllowConvert: true), "look up map 75 (Osu, converts allowed)" },
+        { new PickBeatmap("alice", true, new MapPickQuery(GameMode.Osu, 4, 6, 0, 0, 2012)), "pick a map for alice (host)" },
+        { new PickBeatmap("bob", false, new MapPickQuery(GameMode.Osu, 4, 6, 0, 0, 2012)), "pick a map for bob" },
         { new Say("Queue: alice, bob"), "say: Queue: alice, bob" },
         { new Say("line one\nline two\n"), "say: line one / line two" },
         { new Whisper("alice", "You are next."), "whisper to alice: You are next." },

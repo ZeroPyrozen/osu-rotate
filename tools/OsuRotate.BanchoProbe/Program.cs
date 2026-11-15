@@ -8,6 +8,27 @@ var checkRoom = OptionValue(args, "--check-room") is { } room ? long.Parse(room,
 var idleMinutes = OptionValue(args, "--idle-minutes") is { } minutes ? double.Parse(minutes, CultureInfo.InvariantCulture) : 6;
 
 Console.OutputEncoding = Encoding.UTF8;
+
+// --search only checks the osu! beatmap search for the map pick feature: no IRC, no room.
+if (args.Contains("--search"))
+{
+    Console.WriteLine("osu-rotate beatmap search probe");
+    Console.WriteLine("Checks whether osu! search answers the bot's app-only token. It only reads.");
+    Console.WriteLine();
+    var searchClientId = Environment.GetEnvironmentVariable("OSU_ROTATE_CLIENT_ID") ?? Prompt("osu! OAuth client ID: ");
+    var searchClientSecret = (Environment.GetEnvironmentVariable("OSU_ROTATE_CLIENT_SECRET") ?? PromptHidden("osu! OAuth client secret: ")).Trim();
+    using var searchHttp = new HttpClient();
+    var searchReport = await new SearchProbe(searchHttp).RunAsync(searchClientId.Trim(), searchClientSecret, CancellationToken.None);
+    Console.WriteLine();
+    Console.WriteLine(searchReport);
+    var searchFolder = Path.Combine(RepositoryRoot(), "artifacts", "probe");
+    Directory.CreateDirectory(searchFolder);
+    var searchPath = Path.Combine(searchFolder, $"search-{DateTimeOffset.Now:yyyyMMdd-HHmmss}.md");
+    await File.WriteAllTextAsync(searchPath, searchReport);
+    Console.WriteLine($"Report saved: {searchPath}");
+    return;
+}
+
 Console.WriteLine("osu-rotate Bancho probe");
 Console.WriteLine("Checks how real Bancho behaves, using a test room that is closed at the end.");
 Console.WriteLine();
