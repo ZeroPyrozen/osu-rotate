@@ -313,6 +313,10 @@ public sealed class LobbyActor
             {
                 _ = PickAsync(pick, RecentlyPlayedNotSaved(), cancellationToken);
             }
+            else if (command is ChooseOpeningMap opening)
+            {
+                _ = ChooseOpeningMapAsync(opening, [.. Enumerable.Reverse(_unsavedMatches).Select(m => m.Match)], cancellationToken);
+            }
             else
             {
                 if (command is Say announcement)
@@ -484,6 +488,68 @@ public sealed class LobbyActor
         }
 
         _inbox.Writer.TryWrite(new Envelope(new BanchoEvent(new BeatmapPicked(pick, result)), null));
+    }
+
+    // How many of the newest finished maps are looked up for the opening map before the pool is tried.
+    public const int OpeningMapCandidates = 10;
+
+    // Runs beside the loop like a lookup. The newest finished map that still fits, else one from the
+    // pool. Unsaved matches are newer than the archive's, so they come first. Whatever fails just
+    // leaves the room without an opening map, as before.
+    private async Task ChooseOpeningMapAsync(ChooseOpeningMap opening, MatchRecord[] unsaved, CancellationToken cancellationToken)
+    {
+        BeatmapInfo? chosen = null;
+        try
+        {
+            var recent = new List<MatchRecord>(unsaved);
+            if (_archive is not null)
+            {
+                try
+                {
+                    recent.AddRange((await _archive.RecentAsync(RecentMatchesSkipped, cancellationToken).ConfigureAwait(false)).Select(m => m.Match));
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+#pragma warning disable CA1031 // Without the history the pool can still answer.
+                catch (Exception exception)
+#pragma warning restore CA1031
+                {
+                    _diagnostics.PickFailed(exception);
+                }
+            }
+
+            var candidates = recent.Where(m => m.Outcome == MatchOutcome.Finished).Select(m => m.BeatmapId).Distinct().Take(OpeningMapCandidates);
+            foreach (var beatmapId in candidates)
+            {
+                var lookup = await _catalog.FindAsync(beatmapId, opening.Query.Mode, opening.AllowConvert, cancellationToken).ConfigureAwait(false);
+                if (lookup is { Outcome: BeatmapLookupOutcome.Found, Beatmap: { } map } && opening.Query.Fits(map))
+                {
+                    chosen = map;
+                    break;
+                }
+            }
+
+            if (chosen is null && opening.FromPool && _pool is not null)
+            {
+                var skip = recent.Select(m => m.BeatmapId).ToHashSet();
+                var drawn = await _pool.DrawAsync(opening.Query, skip, cancellationToken).ConfigureAwait(false);
+                chosen = drawn is { Outcome: MapPickOutcome.Found, Beatmap: { } map } ? map : null;
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+#pragma warning disable CA1031 // The catalog and pool should not throw; if they do the room just has no opening map.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            _diagnostics.PickFailed(exception);
+        }
+
+        _inbox.Writer.TryWrite(new Envelope(new BanchoEvent(new OpeningMapChosen(chosen)), null));
     }
 
     // Runs beside the loop like a lookup. No answer is fine: the engine asks again later.
