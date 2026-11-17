@@ -343,6 +343,7 @@ public sealed partial class LobbyEngine
                 ApplyRoomState(e.State);
                 KeeperOnRoomState(e.State);
                 MapsOnRoomState(e.State);
+                OpeningOnRoomState(e.State);
                 break;
 
             case ChatReceived e:

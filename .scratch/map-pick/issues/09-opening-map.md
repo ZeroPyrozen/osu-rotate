@@ -30,8 +30,10 @@ The engine checks the answer against the rules as they are by then, and:
 
 The opening map doesn't start auto start: it waits for the first host to pick or start.
 
-Rejoining a room after a restart is unchanged. That room keeps its map, which is checked quietly as
-before.
+Rejoining a room after a restart keeps the room's map, which is checked quietly as before. But if
+the first `!mp settings` shows no map at all, the rejoined room gets an opening map too. That was the
+case right after deploying 7fe1b3d: the bot rejoined room 122174599, made by the old build, with
+`map 0`. The request is made once per room, since the room state comes again after every match.
 
 Tests: `OpeningMapTests` (domain), the opening map cases in `LobbyActorTests`, and the trace lines in
 `LobbyTraceTests`.

@@ -39,7 +39,14 @@ public sealed class LobbyActorTests : IAsyncDisposable
         _transport.Emit(new RoomJoined(1));
         _transport.Emit(new RoomStateReceived(new RoomState("room", 1, 0, string.Empty, "HeadToHead", "Score", string.Empty, [])));
         await WaitUntilAsync(() => actor.Snapshot.Status == LobbyStatus.Open);
+
+        // The room has no map, so it asks for an opening map (map pick, issue 09). Its answer is in
+        // the inbox by now; once it's handled, it is cleared with the rest of the setup.
+        await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
         _transport.ClearSent();
+        _pool.Asked.Clear();
+        _catalog.Asked.Clear();
+        _archive.RecentAsked.Clear();
         return actor;
     }
 

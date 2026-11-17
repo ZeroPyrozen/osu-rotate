@@ -43,12 +43,54 @@ public class OpeningMapTests
             Assert.Single(lobby.Sent.OfType<ChooseOpeningMap>()));
     }
 
+    private static RoomState StateWithMap(int beatmapId) => new("room", 1, beatmapId, beatmapId == 0 ? string.Empty : "map", "HeadToHead", "Score", "Freemod", []);
+
     [Fact]
     public void Rejoining_a_room_keeps_its_map()
     {
         var lobby = Create();
 
         lobby.Feed(new RoomJoined(1));
+        lobby.Feed(new RoomStateReceived(StateWithMap(853167)));
+
+        Assert.Equal(0, lobby.SentCount<ChooseOpeningMap>());
+        Assert.Equal(0, SetCount(lobby, 700));
+    }
+
+    [Fact]
+    public void A_rejoined_room_with_no_map_gets_an_opening_map_once()
+    {
+        var lobby = Create();
+
+        lobby.Feed(new RoomJoined(1));
+        lobby.Feed(new RoomStateReceived(StateWithMap(0)));
+        lobby.Feed(new RoomStateReceived(StateWithMap(0)));
+
+        Assert.Equal(1, lobby.SentCount<ChooseOpeningMap>());
+        Assert.Equal(1, SetCount(lobby, 700));
+        Assert.Equal(700, lobby.Engine.LastAcceptedMapId);
+    }
+
+    [Fact]
+    public void A_made_room_is_not_asked_about_again_when_its_state_shows_no_map()
+    {
+        var lobby = Create();
+        lobby.OpeningMap = null;
+
+        CreateRoom(lobby);
+        lobby.Feed(new RoomStateReceived(StateWithMap(0)));
+
+        Assert.Equal(1, lobby.SentCount<ChooseOpeningMap>());
+    }
+
+    [Fact]
+    public void A_room_whose_map_changed_before_its_state_came_is_not_asked_about()
+    {
+        var lobby = Create();
+        lobby.Feed(new RoomJoined(1));
+        lobby.PickMap(800);
+
+        lobby.Feed(new RoomStateReceived(StateWithMap(0)));
 
         Assert.Equal(0, lobby.SentCount<ChooseOpeningMap>());
     }
