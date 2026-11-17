@@ -131,6 +131,7 @@ public sealed partial class LobbyEngine
                 if (lobbyEvent is RoomCreated)
                 {
                     KeeperOnRoomCreated();
+                    OpeningOnRoomCreated();
                 }
 
                 StartInfoAnnouncement();
@@ -247,8 +248,13 @@ public sealed partial class LobbyEngine
                 InfoOnBeatmapChanged(e);
                 _mapChangedSinceMatch = true;
                 StartHostAfkCheck(first: false);
+                OpeningOnBeatmapChanged();
                 MapsOnBeatmapChanged(e.BeatmapId, e.Title);
-                AutoStartOnBeatmapChanged(e.BeatmapId);
+                if (!IsOpeningMapChange(e.BeatmapId))
+                {
+                    AutoStartOnBeatmapChanged(e.BeatmapId);
+                }
+
                 break;
 
             case BeatmapLookedUp e:
@@ -258,6 +264,10 @@ public sealed partial class LobbyEngine
 
             case BeatmapPicked e:
                 PickOnAnswered(e);
+                break;
+
+            case OpeningMapChosen e:
+                OpeningOnChosen(e);
                 break;
 
             case MatchStarted:

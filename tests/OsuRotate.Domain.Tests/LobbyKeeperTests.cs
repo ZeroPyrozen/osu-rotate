@@ -453,8 +453,11 @@ public class LobbyKeeperTests
             lobby.Feed(new RoomCreated(1, "room"));
             Assert.Equal(
                 [new SetRoomName("auto host rotation"), new SetTeamAndScoreMode(2, 3, 8), new SetMods("Freemod dt"), new SetPassword("secret")],
-                lobby.Sent);
+                KeeperSent(lobby));
         }
+
+        // A new room also asks for an opening map (OpeningMapTests); only the keeper's commands count here.
+        private static List<LobbyCommand> KeeperSent(LobbyHarness lobby) => [.. lobby.Sent.Where(c => c is not ChooseOpeningMap)];
 
         [Fact]
         public void Joining_the_room_does_the_same()
@@ -478,7 +481,7 @@ public class LobbyKeeperTests
         {
             var lobby = Create(new RoomKeeping { Size = 4, Password = string.Empty });
             lobby.Feed(new RoomCreated(1, "room"));
-            Assert.Equal([new SetSize(4), new SetPassword(null)], lobby.Sent);
+            Assert.Equal([new SetSize(4), new SetPassword(null)], KeeperSent(lobby));
         }
 
         [Fact]
@@ -486,7 +489,7 @@ public class LobbyKeeperTests
         {
             var lobby = Create(new RoomKeeping { Mode = new KeptMode(TeamMode.TagCoop, ScoreMode.Combo) });
             lobby.Feed(new RoomCreated(1, "room"));
-            Assert.Equal([new SetTeamAndScoreMode(1, 2), new SetPassword(null)], lobby.Sent);
+            Assert.Equal([new SetTeamAndScoreMode(1, 2), new SetPassword(null)], KeeperSent(lobby));
         }
 
         // Bancho gives an !mp make room a random password. A new room is opened unless the rules
@@ -496,7 +499,7 @@ public class LobbyKeeperTests
         {
             var lobby = Create(new RoomKeeping());
             lobby.Feed(new RoomCreated(1, "room"));
-            Assert.Equal([new SetPassword(null)], lobby.Sent);
+            Assert.Equal([new SetPassword(null)], KeeperSent(lobby));
         }
 
         [Fact]
@@ -504,7 +507,7 @@ public class LobbyKeeperTests
         {
             var lobby = Create(new RoomKeeping { Password = "secret" });
             lobby.Feed(new RoomCreated(1, "room"));
-            Assert.Equal([new SetPassword("secret")], lobby.Sent);
+            Assert.Equal([new SetPassword("secret")], KeeperSent(lobby));
         }
 
         [Fact]

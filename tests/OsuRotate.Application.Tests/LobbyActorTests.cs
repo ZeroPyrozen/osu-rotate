@@ -222,6 +222,94 @@ public sealed class LobbyActorTests : IAsyncDisposable
         Assert.Equal(20, LobbyActor.RecentMatchesSkipped);
     }
 
+    // Map pick, issue 09: a room the bot makes opens on the newest played map that fits, else a pool map.
+    private async Task<LobbyActor> CreateRoomAsync(Func<LobbySettings, LobbySettings>? configure = null)
+    {
+        var actor = Start(s => (configure?.Invoke(s) ?? s) with { Regulation = new MapRegulation { StarMin = 4, StarMax = 6 } });
+        _transport.Emit(new TransportConnected());
+        await actor.PostAsync(new CreateLobby("room"));
+        await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        _transport.Emit(new RoomCreated(1, "room"));
+        return actor;
+    }
+
+    private ArchivedMatch Aborted(long id, int beatmapId) =>
+        Played(id, beatmapId) with { Match = Played(id, beatmapId).Match with { Outcome = MatchOutcome.Aborted } };
+
+    [Fact]
+    public async Task A_new_room_opens_on_the_newest_finished_map_that_fits()
+    {
+        _archive.Recent.AddRange([Aborted(4, 41), Played(3, 31), Played(2, 21), Played(1, 11)]);
+        _catalog.Stars[31] = 7;
+
+        await CreateRoomAsync(WithPicks);
+
+        var sent = await _transport.WaitForAsync(s => s.OfType<SetBeatmap>().Any());
+        Assert.Equal(21, Assert.Single(sent.OfType<SetBeatmap>()).BeatmapId);
+        Assert.Equal([31, 21], _catalog.Asked);
+        Assert.Empty(_pool.Asked);
+        Assert.DoesNotContain(sent, c => c is ChooseOpeningMap);
+    }
+
+    [Fact]
+    public async Task With_nothing_in_the_history_that_fits_the_pool_gives_the_opening_map()
+    {
+        _archive.Recent.AddRange([Played(2, 21), Played(1, 11)]);
+        _catalog.Stars[21] = 7;
+        _catalog.Stars[11] = 3;
+
+        await CreateRoomAsync(WithPicks);
+
+        var sent = await _transport.WaitForAsync(s => s.OfType<SetBeatmap>().Any());
+        Assert.Equal(500, Assert.Single(sent.OfType<SetBeatmap>()).BeatmapId);
+        Assert.Equal([11, 21], Assert.Single(_pool.Asked).Skip.Order());
+    }
+
+    [Fact]
+    public async Task Only_the_newest_ten_maps_are_looked_up()
+    {
+        _archive.Recent.AddRange(Enumerable.Range(1, 15).Select(i => Played(100 - i, i)));
+        foreach (var id in Enumerable.Range(1, 15))
+        {
+            _catalog.Stars[id] = 7;
+        }
+
+        await CreateRoomAsync(WithPicks);
+
+        await _transport.WaitForAsync(s => s.OfType<SetBeatmap>().Any());
+        Assert.Equal(Enumerable.Range(1, LobbyActor.OpeningMapCandidates), _catalog.Asked);
+    }
+
+    [Fact]
+    public async Task Without_pick_and_nothing_that_fits_the_room_keeps_no_map()
+    {
+        _archive.Recent.Add(Played(1, 11));
+        _catalog.Stars[11] = 7;
+        var actor = await CreateRoomAsync();
+
+        await WaitUntilAsync(() => _catalog.Asked.Count == 1);
+        await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        await actor.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.DoesNotContain(_transport.Sent, c => c is SetBeatmap);
+        Assert.Empty(_pool.Asked);
+    }
+
+    [Fact]
+    public async Task A_failing_catalog_is_reported_and_the_room_goes_on()
+    {
+        _archive.Recent.Add(Played(1, 11));
+        _catalog.Throw = true;
+        var actor = await CreateRoomAsync(WithPicks);
+
+        await WaitUntilAsync(() => _diagnostics.Reports.Contains("pick HttpRequestException"));
+        _transport.Emit(new PlayerJoined("p1", 1, Team.None));
+
+        await _transport.WaitForAsync(sent => sent.Contains(new TransferHost("p1")));
+        Assert.DoesNotContain(_transport.Sent, c => c is SetBeatmap);
+        Assert.Equal(LobbyStatus.Open, actor.Snapshot.Status);
+    }
+
     [Fact]
     public async Task A_failing_pool_is_reported_and_answered_as_failed()
     {

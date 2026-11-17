@@ -67,6 +67,9 @@ public static partial class LobbyTrace
         BeatmapPicked e => e.Result.Beatmap is { } picked
             ? Invariant($"map pick for {e.Request.Requester}: {picked.Id}, {picked.StarRating:0.00}*, {picked.LengthSeconds} s")
             : $"map pick for {e.Request.Requester}: {e.Result.Outcome}",
+        OpeningMapChosen e => e.Beatmap is { } opening
+            ? Invariant($"opening map: {opening.Id}, {opening.StarRating:0.00}*, {opening.LengthSeconds} s")
+            : "opening map: none",
         MatchHistoryRead e => Invariant($"match history read: {e.Kicks.Count} kicks, up to event {e.LatestEventId}"),
         CountdownStarted e => Invariant($"countdown {e.Seconds} s"),
         PlayerFinished e => Invariant($"finished: {e.Username} {e.Score}{(e.Passed ? string.Empty : " (failed)")}"),
@@ -93,6 +96,7 @@ public static partial class LobbyTrace
         InvitePlayer e => $"!mp invite {e.Username}",
         LookUpBeatmap e => Invariant($"look up map {e.BeatmapId} ({e.Mode}{(e.AllowConvert ? ", converts allowed" : string.Empty)})"),
         PickBeatmap e => $"pick a map for {e.Requester}{(e.AsHost ? " (host)" : string.Empty)}",
+        ChooseOpeningMap e => e.FromPool ? "choose an opening map (history, then pool)" : "choose an opening map (history)",
         ReadMatchHistory e => e.AfterEventId is { } after ? Invariant($"read match history after event {after}") : "read match history",
         RecordMatch e => Invariant($"record match: map {e.Match.BeatmapId}, host {e.Match.HostName ?? "none"}, {e.Match.Outcome}, {e.Match.Scores.Count} scores"),
         SetBeatmap e => Invariant($"!mp map {e.BeatmapId}{(e.GameMode is { } mode ? $" {mode}" : string.Empty)}"),

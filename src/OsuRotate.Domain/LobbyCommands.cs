@@ -42,6 +42,11 @@ public sealed record ReadMatchHistory(long? AfterEventId) : LobbyCommand;
 // Never send it to the transport.
 public sealed record PickBeatmap(string Requester, bool AsHost, MapPickQuery Query) : LobbyCommand;
 
+// Also answered by the application, when a room is made: the newest map from the match history that
+// fits the query in its mode, else one from the map pool when FromPool, else none. Fed back as
+// OpeningMapChosen. Never send it to the transport.
+public sealed record ChooseOpeningMap(MapPickQuery Query, bool AllowConvert, bool FromPool) : LobbyCommand;
+
 // Also answered by the application: save the match to the history. Never send it to the transport.
 public sealed record RecordMatch(MatchRecord Match) : LobbyCommand;
 

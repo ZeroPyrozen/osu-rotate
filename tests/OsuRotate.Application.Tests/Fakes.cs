@@ -61,6 +61,9 @@ internal sealed class FakeCatalog : IBeatmapCatalog
 
     public bool Throw { get; set; }
 
+    // Star ratings for particular maps; the rest are 5 stars.
+    public ConcurrentDictionary<int, double> Stars { get; } = new();
+
     public static BeatmapInfo Map(int id) => new(id, id * 10, $"title {id}", GameMode.Osu, 5, 120, "ranked");
 
     public ValueTask<BeatmapLookup> FindAsync(int beatmapId, GameMode mode, bool allowConvert, CancellationToken cancellationToken)
@@ -73,7 +76,8 @@ internal sealed class FakeCatalog : IBeatmapCatalog
 
         if (!Hold)
         {
-            return ValueTask.FromResult(BeatmapLookup.Found(Map(beatmapId)));
+            var map = Map(beatmapId);
+            return ValueTask.FromResult(BeatmapLookup.Found(Stars.TryGetValue(beatmapId, out var stars) ? map with { StarRating = stars } : map));
         }
 
         var pending = _pending.GetOrAdd(beatmapId, _ => new TaskCompletionSource<BeatmapLookup>(TaskCreationOptions.RunContinuationsAsynchronously));

@@ -92,6 +92,9 @@ public sealed record MatchHistoryRead(IReadOnlyList<SeenKick> Kicks, long Latest
 // The application's answer to LookUpBeatmap.
 public sealed record BeatmapLookedUp(int BeatmapId, BeatmapLookup Result) : LobbyEvent;
 public sealed record BeatmapPicked(PickBeatmap Request, MapPickResult Result) : LobbyEvent;
+
+// The application's answer to ChooseOpeningMap. Null when nothing fits or nothing could be read.
+public sealed record OpeningMapChosen(BeatmapInfo? Beatmap) : LobbyEvent;
 public sealed record InvalidSettings : LobbyEvent;
 public sealed record InvalidSize : LobbyEvent;
 

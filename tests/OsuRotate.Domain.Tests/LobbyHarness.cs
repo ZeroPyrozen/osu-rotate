@@ -243,6 +243,24 @@ internal sealed class LobbyHarness
         }
     }
 
+    // What the application answers to ChooseOpeningMap. Null: nothing fits.
+    public BeatmapInfo? OpeningMap { get; set; }
+
+    // While false, the opening map waits for AnswerOpeningMap, as when the osu! API is slow.
+    public bool AnswerOpeningMapAtOnce { get; set; } = true;
+
+    public List<ChooseOpeningMap> PendingOpeningMaps { get; } = [];
+
+    public void AnswerOpeningMap()
+    {
+        var requests = PendingOpeningMaps.Count;
+        PendingOpeningMaps.Clear();
+        for (var i = 0; i < requests; i++)
+        {
+            Feed(new OpeningMapChosen(OpeningMap));
+        }
+    }
+
     private MapPickResult NextPick() => PickResults.TryDequeue(out var result) ? result : MapPickResult.Found(Map(500));
 
     // The host picking a map in the game.
@@ -365,6 +383,12 @@ internal sealed class LobbyHarness
                 break;
             case PickBeatmap c:
                 PendingPicks.Add(c);
+                break;
+            case ChooseOpeningMap when AnswerOpeningMapAtOnce:
+                yield return new OpeningMapChosen(OpeningMap);
+                break;
+            case ChooseOpeningMap c:
+                PendingOpeningMaps.Add(c);
                 break;
             case SetBeatmap c:
                 yield return new BeatmapChanged(c.BeatmapId, $"title {c.BeatmapId}", true);
